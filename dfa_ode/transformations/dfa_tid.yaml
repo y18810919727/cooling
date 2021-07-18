@@ -1,0 +1,48 @@
+ode_nums: 6
+# 'Ti', 'Pcooling', 'Power cooling'
+# Definitions of DFA states  ['unknown', 'closed', 'start-1', 'start-2', 'cooling', 'stop']
+transformations:
+  - from: 1
+    to: 2
+    rules:
+      - [0 , geq , 19.9]
+  - from: 4
+    to: 5
+    rules:
+    - [0 ,leq, 12]
+predictors:
+  - ['predict', 2]
+  - ['predict', 3]
+  - ['predict', 5]
+ode_2order: False
+Ly_share: False
+
+# The type of odes.y:
+#   s: stationary           dy_dt = f(ht) - yt
+#   n: non-stationary       dy_dt = f(ht)
+#   d: directed prediction  yt = f(ht)
+odes:
+- name: unknown
+  cell: gru
+  y_type: ['d', 'd', 'd']
+
+- name: closed
+  cell: gru
+  y_type: ['n', 'd', 'd']
+
+- name: start-1
+  cell: gru
+  y_type: ['d', 'd', 'd']
+
+- name: start-2
+  cell: gru
+  y_type: ['d', 'd', 'd']
+
+- name: cooling
+  cell: gru
+  y_type: ['n', 'd', 'd']
+
+- name: stop
+  cell: gru
+  y_type: ['d', 'd', 'd']
+
