@@ -64,7 +64,7 @@ RKchoices = ['Euler', 'Midpoint', 'Kutta3', 'RK4']
 parser.add_argument("--scheme", type=str, default='Euler', choices=RKchoices, help='Runge-Kutta training scheme')
 
 # training
-parser.add_argument("--batch_size", type=int, default=8192, help="batch size")
+parser.add_argument("--batch_size", type=int, default=4096, help="batch size")
 parser.add_argument("--visualization_len", type=int, default=2000, help="The length of visualization.")
 parser.add_argument("--epochs", type=int, default=500, help="Number of epochs")
 parser.add_argument("--lr", type=float, default=0.005, help="learning rate")

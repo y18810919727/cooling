@@ -141,9 +141,6 @@ def add_state_label(df):
                 cur_state = 4
         elif cur_state == 4:
             if cooling <= 17000 and ti <= 13:
-                cur_state = 5
-        elif cur_state == 5:
-            if cooling <= 0:
                 cur_state = 1
         states.append(cur_state)
     ndf = df.copy(deep=True)
@@ -164,6 +161,7 @@ def process_dataset(df):
     df['delta'] = df['time'][1:] - df['time'][:-1]
     df.interpolate(axis=0, method='linear', limit_direction='both', inplace=True)
     return df
+
 
 def get_mlp_network(layer_sizes, outputs_size):
 
@@ -194,7 +192,7 @@ def visualize_prediction(Y_label, Y_pred, s_test, base_dir, seg_length=500, dir_
         #         scatter = plt.scatter(np.arange(begin, begin+len(tdf)), tdf['Power cooling'], c=tdf['states'], s=10)
         X = np.arange(begin, begin + len(y_label_seg))
         outputs_names = ['Ti', 'Pcooling', 'Power cooling']
-        classes = ['unknown', 'closed', 'start-1', 'start-2', 'cooling', 'stop']
+        classes = ['unknown', 'closed', 'start-1', 'start-2', 'cooling']
         for i, y_name in enumerate(outputs_names):
             plt.subplot(3, 1, i + 1)
             y_label = y_label_seg[:, i]
