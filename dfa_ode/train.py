@@ -163,8 +163,17 @@ class EpochTrainer(object):
             )
 
             # The model determines the dfa states at time t by itself based on h(t-1), state(t-1), x(t).
+            states_last_step = torch.cat([state0.unsqueeze(dim=1), states_pred[:,:-1, :]], dim=1)
+            yt_ht_for_state_transform = states_last_step[..., :-2]
+            cum_t_for_state_transform = states_last_step[..., -2:-1] + dt
+            s_for_state_transform = states_last_step[..., -1:]
+
             all_dfa_states_tag, all_dfa_states_prob, extra_info = self.model.states_classification(
-                torch.cat([state0.unsqueeze(dim=1), states_pred[:,:-1, :]], dim=1),
+                torch.cat([
+                    yt_ht_for_state_transform,
+                    cum_t_for_state_transform,
+                    s_for_state_transform
+                ], dim=-1),
                 inputs=X
             )
 
@@ -172,21 +181,28 @@ class EpochTrainer(object):
             if 'predicted_stop_cum_time' in extra_info.keys():
                 stop_time_label = torch.zeros_like(extra_info['real_cum_time']) * float('nan')
                 stop_time_label_tmp = torch.zeros_like(stop_time_label[:,0]) * float('nan') # make a nan Tensor with shape (bs, 1)
-                for l in reversed(range(stop_time_label.size()[1] - 1)):
-                    updated_place = (states_label[:, l] != states_label[:, l+1]).squeeze(dim=1)
-                    stop_time_label_tmp[updated_place] = \
-                        extra_info['real_cum_time'][updated_place, l] + dt[updated_place, l]
-                    stop_time_label[:, l] = stop_time_label_tmp.detach().clone()
+                for l in reversed(range(stop_time_label.size()[1])):
+                    updated_place = (states_label[:, l] != s_for_state_transform[:, l]).squeeze(dim=1)
+                    if torch.any(updated_place):
+                        stop_time_label_tmp[updated_place] = extra_info['real_cum_time'][updated_place, l]
+                        stop_time_label[:, l] = stop_time_label_tmp.detach().clone()
 
                 not_null_indices = ~torch.logical_or(
                     torch.isnan(stop_time_label),
                     torch.isnan(extra_info['predicted_stop_cum_time']),
-
                 )
                 loss_classification = torch.nn.functional.mse_loss(
                     stop_time_label[not_null_indices],
                     extra_info['predicted_stop_cum_time'][not_null_indices]
                 )
+                # for state_index in range(6):
+                #     print('state : %d, mean of label %.2f, mean of prediction %.2f' % (state_index, float(
+                #         stop_time_label[not_null_indices][s_for_state_transform[not_null_indices] == state_index].mean()
+                #     ), float(
+                #         extra_info['predicted_stop_cum_time'][not_null_indices][
+                #             s_for_state_transform[not_null_indices] == state_index
+                #         ].mean()
+                #     )))
 
             else:
 

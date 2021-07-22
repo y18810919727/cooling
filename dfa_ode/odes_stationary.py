@@ -46,7 +46,7 @@ class DFA_ODENets(nn.Module):
                         self.k_state + self.k_state, self.k_state
                     )
                 elif kind == 'classify':
-                    self.state_transformation_predictor[str(state)] = Predictor(
+                    self.state_transformation_predictor[str(state)] = Classification(
                         self.k_state + self.k_state, self.k_state
                     )
                 else:
@@ -201,12 +201,17 @@ class DFA_ODENets(nn.Module):
 
         state = torch.zeros((xt.shape[0], self.k_out + self.k_state + 2), device=xt.device) if state is None else state
         ht, cum_t, s = state[..., :-2], state[..., -2:-1], state[..., -1:]
+        new_ht = self.combinational_ode(s, ht, xt, dt)
+        new_cum_t = cum_t + dt
+
         if new_s is None:
-            new_s, new_s_prob, _ = self.state_transform(state, xt)
-        new_ht = self.combinational_ode(new_s, ht, xt, dt)
+            new_s, new_s_prob, _ = self.state_transform(
+                torch.cat([new_ht, cum_t, s], dim=-1),
+                xt
+            )
         updated_indices = (s.squeeze(dim=-1) != new_s.squeeze(dim=-1))
-        cum_t[updated_indices] = 0
-        cum_t[~updated_indices] += dt[~updated_indices]
-        return self.decode_y(new_ht), torch.cat([new_ht, cum_t, new_s.float()], dim=-1)
+        new_cum_t[updated_indices] = 0
+
+        return self.decode_y(new_ht), torch.cat([new_ht, new_cum_t, new_s.float()], dim=-1)
 
 

@@ -184,7 +184,9 @@ def visualize_prediction(Y_label, Y_pred, s_test, base_dir, seg_length=500, dir_
     if not os.path.exists(os.path.join(base_dir, dir_name)):
         os.mkdir(os.path.join(base_dir, dir_name))
     max_state = int(np.max(s_test))
+    ID = 0
     for begin in range(0, len(Y_pred), seg_length):
+        ID += 1
         plt.figure(figsize=(15, 12))
         y_label_seg = Y_label[begin:min(begin + seg_length, len(Y_label))]
         y_pred_seg = Y_pred[begin:min(begin + seg_length, len(Y_pred))]
@@ -200,15 +202,15 @@ def visualize_prediction(Y_label, Y_pred, s_test, base_dir, seg_length=500, dir_
             plt.plot(X, y_label, '-k', label='Time Series')
             for state in range(max_state+1):
                 indices = (s_test_seg.squeeze(axis=-1) == state)
-                scatter = plt.scatter(X[indices], y_pred[indices], label='pred-'+classes[state], s=10, marker='o')
+                scatter = plt.scatter(X[indices], y_pred[indices], label='pred-'+classes[state], s=5, marker='o')
             plt.xlabel('indexes')
             plt.ylabel(y_name)
             plt.legend()
 
         plt.savefig(os.path.join(
-            base_dir, dir_name, '%i-%i.png' % (begin, begin + seg_length)
+            base_dir, dir_name, '%i-%i-%i.png' % (ID, begin, begin + seg_length)
         ))
-    plt.close()
+        plt.close()
 
 
 def display_states_confusion_matrix(true, pred, path, labels, print_handle=print):

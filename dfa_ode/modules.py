@@ -93,9 +93,9 @@ class Predictor(nn.Module):
     def __init__(self, input_size, hidden):
         super().__init__()
         self.net = nn.Sequential(
-            nn.Linear(input_size, hidden),
-            nn.Tanh(),
-            nn.Linear(hidden, 1),
+            nn.Linear(input_size, hidden, bias=False),
+            nn.Sigmoid(),
+            nn.Linear(hidden, 1, bias=True),
         )
 
     def forward(self, ht, xt):

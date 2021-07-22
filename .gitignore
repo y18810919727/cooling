@@ -112,3 +112,5 @@ venv.bak/
 /interpolate_test/
 .idea
 
+/getDistribution/cooling_traing_states.csv
+/test/
