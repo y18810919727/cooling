@@ -1,5 +1,6 @@
 import numpy as np
 import os
+import pandas as pd
 import torch
 import torch.nn as nn
 import matplotlib.pyplot as plt
@@ -151,6 +152,12 @@ def add_state_label(df):
     return ndf
 
 
+def get_Dataset(path):
+    df = pd.read_csv(path)
+    df = process_dataset(df)
+    return df[['Pserver', 'Tr']], df[['Ti', 'Pcooling', 'Power cooling']], df[['time']], df[['states']]
+
+
 def process_dataset(df):
 
     df = add_state_label(df)
@@ -227,3 +234,7 @@ def display_states_confusion_matrix(true, pred, path, labels, print_handle=print
     disp = ConfusionMatrixDisplay(cm, display_labels=final_labels)
     disp.plot(cmap='Greens')
     plt.savefig('%s.png' % path)
+
+
+def t2np(tensor):
+    return tensor.squeeze(dim=0).detach().cpu().numpy()

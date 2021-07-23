@@ -10,7 +10,7 @@ sys.path.append(parent)
 from taho.model import MIMO, GRUCell, HOGRUCell, IncrHOGRUCell, HOARNNCell, IncrHOARNNCell
 from dfa_ode.model_dfa import DFA_MIMO
 from dfa_ode.train import EpochTrainer
-from util import SimpleLogger, show_data, init_weights, array_operate_with_nan, process_dataset, visualize_prediction
+from util import SimpleLogger, show_data, init_weights, array_operate_with_nan, get_Dataset, visualize_prediction, t2np
 
 import pandas as pd
 
@@ -152,10 +152,6 @@ Load data
 """
 
 
-def get_Dataset(path):
-    df = pd.read_csv(path)
-    df = process_dataset(df)
-    return df[['Pserver', 'Tr']], df[['Ti', 'Pcooling', 'Power cooling']], df[['time']], df[['states']]
 
 if paras.debug:
     Xtrain, Ytrain, ttrain, strain = [df.to_numpy(dtype=np.float32) for df in get_Dataset('./data/Data_train_debug.csv')]
@@ -326,8 +322,6 @@ if GPU:
     strain_tn, sdev_tn, stest_tn = [s.cuda() for s in [strain_tn, sdev_tn, stest_tn]]
 
 
-def t2np(tensor):
-    return tensor.squeeze(dim=0).detach().cpu().numpy()
 
 
 trainer = EpochTrainer(model, optimizer, paras.epochs, Xtrain, Ytrain, strain, dttrain,
