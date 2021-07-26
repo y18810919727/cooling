@@ -144,10 +144,10 @@ class DFA_MIMO(nn.Module):
 
         :param X_tn: Inputs with shape (bs, la+lb, k_in)
         :param dt_tn: Time deltas with shape (bs, la+lb, 1)
-        :param history_Y_tn:
-        :param history_s_tn:
-        :param history_length:
-        :param future_s_tn:
+        :param history_Y_tn: shape(bs, la, k_out)
+        :param history_s_tn: shape(bs, la, 1)
+        :param history_length: la
+        :param future_s_tn: shape(bs, lb, 1)
         :return:
         """
 

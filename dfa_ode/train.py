@@ -25,6 +25,7 @@ class EpochTrainer(object):
         self.Xtrain, self.Ytrain = None, None
         self.train_inds = []
         self.bptt = bptt  # for now: constant segment length, hence constant train indices
+        self.w = min(bptt, X.shape[0]//2)
         self.class_criterion = torch.nn.CrossEntropyLoss()
 
         self.all_states = None
@@ -50,7 +51,7 @@ class EpochTrainer(object):
         tr = TimeRecorder()
 
         with tr('batch data generation'):
-            w = self.bptt
+            w = self.w
             N = self.X.shape[0]
             Xtrain = np.asarray([self.X[i:min(N, i + w), :] for i in range(max(1, N - w + 1))])  # (instances N-w+1, w, k_in)
             Ytrain = np.asarray([self.Y[i:min(N, i + w), :] for i in range(max(1, N - w + 1))])  # (instances N-w+1, w, k_out)
@@ -67,7 +68,7 @@ class EpochTrainer(object):
             self.dttrain = dttrain.cuda() if self.gpu else dttrain
             self.states_train = states_train.cuda() if self.gpu else states_train
             # self.train_inds = list(range(self.Xtrain.size(0)))  # all instances
-            self.train_inds = list(range(self.Xtrain.size(0)-1))  # all instances, minus one to prepare historical seq
+            self.train_inds = list(range(self.Xtrain.size(0)-w))  # all instances, minus w to prepare historical seq
 
         with tr('long seq data generation'):
             Xtrain1 = torch.tensor(self.X, dtype=torch.float).unsqueeze(0)  # (1, seq_len, n_in)  all lengths
@@ -90,10 +91,6 @@ class EpochTrainer(object):
         # all_states_posterior = self.model.rnn_encoder(self.Ytrain1)
 
     def __call__(self, epoch):
-
-
-
-
         np.random.shuffle(self.train_inds)
 
         # iterations within current epoch
@@ -125,10 +122,10 @@ class EpochTrainer(object):
         dfa_states_classifications_pred_all = []
         dfa_states_classifications_label_all = []
 
-        for i in range(int(np.ceil((len(self.train_inds)-1) / self.batch_size))):
+        for i in range(int(np.ceil(len(self.train_inds) / self.batch_size))):
             # get indices for next batch
             iter_inds = self.train_inds[i * self.batch_size: (i + 1) * self.batch_size]
-            iter_inds_next = [x+1 for x in iter_inds]
+            iter_inds_next = [x+self.w for x in iter_inds]
             bs = len(iter_inds)
 
             # get initial states for next batch
@@ -147,12 +144,12 @@ class EpochTrainer(object):
             Y_target = self.Ytrain[iter_inds_next, :, :]
             s = self.states_train[iter_inds_next]
 
-            pre_outputs, pre_states = self.model.forward_posterior(torch.cat([pre_X, pre_Y_target], dim=-1), dfa_states=pre_s, dt=pre_dt)
-            state0 = pre_states[:, -1]
-
             # training
             self.model.train()
             self.model.zero_grad()
+
+            pre_outputs, pre_states = self.model.forward_posterior(torch.cat([pre_X, pre_Y_target], dim=-1), dfa_states=pre_s, dt=pre_dt)
+            state0 = pre_states[:, -1]
 
             with tr('forward'):
                 Y_pred, states_pred = self.model.forward_prediction(X, state0=state0, dfa_states=s, dt=dt)

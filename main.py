@@ -314,7 +314,6 @@ try:  # catch error and redirect to logger
         mse_train = trainer(epoch)
         if epoch % paras.eval_epochs == 0:
             with torch.no_grad():
-
                 model.eval()
                 # (1) forecast on train data steps
 
@@ -406,6 +405,7 @@ try:  # catch error and redirect to logger
                 elif epoch - best_dev_epoch > max_epochs_no_decrease:
                     logging('Development error did not decrease over %d epochs -- quitting.'%max_epochs_no_decrease)
                     break
+
 
     log_value('finished/best_dev_error', best_dev_error, 0)
     log_value('finished/corresp_test_error', error_test, 0)
