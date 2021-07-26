@@ -7,7 +7,6 @@ GPU = torch.cuda.is_available()
 
 parent = os.path.dirname(sys.path[0])#os.getcwd())
 sys.path.append(parent)
-from taho.model import MIMO, GRUCell, HOGRUCell, IncrHOGRUCell, HOARNNCell, IncrHOARNNCell
 from dfa_ode.model_dfa import DFA_MIMO
 from dfa_ode.train import EpochTrainer
 from util import SimpleLogger, show_data, init_weights, array_operate_with_nan, get_Dataset, visualize_prediction, t2np
@@ -48,11 +47,6 @@ parser.add_argument("--time_aware", type=str, default='variable', choices=['no',
 parser.add_argument("--model", type=str, default='GRU', choices=['GRU', 'GRUinc', 'ARNN', 'ARNNinc', 'DFA'])
 parser.add_argument("--interpol", type=str, default='constant', choices=['constant', 'linear'])
 
-
-parser.add_argument("--gamma", type=float, default=1.0, help="diffusion parameter ARNN model")
-parser.add_argument("--step_size", type=float, default=1.0, help="fixed step size parameter in the ARNN model")
-
-
 # data
 parser.add_argument("--missing", type=float, default=0.0, help="fraction of missing samples (0.0 or 0.5)")
 
@@ -68,7 +62,7 @@ parser.add_argument("--batch_size", type=int, default=4096, help="batch size")
 parser.add_argument("--visualization_len", type=int, default=2000, help="The length of visualization.")
 parser.add_argument("--epochs", type=int, default=500, help="Number of epochs")
 parser.add_argument("--lr", type=float, default=0.005, help="learning rate")
-parser.add_argument("--bptt", type=int, default=400, help="bptt")
+parser.add_argument("--bptt", type=int, default=800, help="bptt")
 parser.add_argument("--dropout", type=float, default=0., help="drop prob")
 parser.add_argument("--l2", type=float, default=0., help="L2 regularization")
 
@@ -152,8 +146,7 @@ Load data
 """
 
 
-
-if paras.debug:
+if paras.debug: # Using short dataset for acceleration
     Xtrain, Ytrain, ttrain, strain = [df.to_numpy(dtype=np.float32) for df in get_Dataset('./data/Data_train_debug.csv')]
     Xdev, Ydev, tdev, sdev = [df.to_numpy(dtype=np.float32) for df in get_Dataset('./data/Data_validate_short_debug.csv')]
 else:
@@ -206,10 +199,6 @@ def prediction_error(truth, prediction):
 - model:
     GRU (compensated GRU to avoid linear increase of state; has standard GRU as special case for Euler scheme and equidistant data)
     GRUinc (incremental GRU, for baseline only)
-- time_aware:
-    no: ignore uneven spacing: for GRU use original GRU implementation
-    input: use normalized next interval size as extra input feature
-    variable: time-aware implementation
 """
 
 #time_aware options
@@ -245,33 +234,17 @@ if paras.time_aware == 'no' or paras.time_aware == 'input':
 dt_mean = np.mean(dttrain)
 # set model:
 if not paras.test:
-    if paras.model == 'DFA':
-        import yaml
-        fs = open('./dfa_ode/transformations/{}.yaml'.format(paras.dfa_yaml), encoding='UTF-8', mode='r')
-        dfa_setting = yaml.load(fs, Loader=yaml.FullLoader)
-        model = DFA_MIMO(dfa_setting['ode_nums'], 1, k_in, k_out, paras.k_state, y_mean=Y_mean, y_std=Y_std,
-                         odes_para=dfa_setting['odes'],
-                         ode_2order=dfa_setting['ode_2order'],
-                         transformations=dfa_setting['transformations'],
-                         state_transformation_predictor=dfa_setting['predictors'], cell_type='merge',
-                         Ly_share=dfa_setting['Ly_share'])
+    # Generating a new model
+    import yaml
+    fs = open('./dfa_ode/transformations/{}.yaml'.format(paras.dfa_yaml), encoding='UTF-8', mode='r')
+    dfa_setting = yaml.load(fs, Loader=yaml.FullLoader)
+    model = DFA_MIMO(dfa_setting['ode_nums'], 1, k_in, k_out, paras.k_state, y_mean=Y_mean, y_std=Y_std,
+                     odes_para=dfa_setting['odes'],
+                     ode_2order=dfa_setting['ode_2order'],
+                     transformations=dfa_setting['transformations'],
+                     state_transformation_predictor=dfa_setting['predictors'], cell_type='merge',
+                     Ly_share=dfa_setting['Ly_share'])
 
-    else:
-
-        if paras.model == 'GRU':
-            cell_factory = GRUCell if paras.time_aware == 'no' else HOGRUCell
-        elif paras.model == 'GRUinc':
-            cell_factory = IncrHOGRUCell
-        elif paras.model == 'ARNN':
-            cell_factory = HOARNNCell
-        elif paras.model == 'ARNNinc':
-            cell_factory = IncrHOARNNCell
-        else:
-            raise NotImplementedError('unknown model type ' + paras.model)
-        model = MIMO(k_in, k_out, paras.k_state, dropout=paras.dropout, cell_factory=cell_factory, meandt=dt_mean,
-                     train_scheme=paras.scheme, eval_scheme=paras.scheme, gamma=paras.gamma, step_size=paras.step_size,
-                     interpol=paras.interpol
-                     )
     model.apply(init_weights)
 else:
     model = torch.load(model_test_path)
@@ -322,8 +295,6 @@ if GPU:
     strain_tn, sdev_tn, stest_tn = [s.cuda() for s in [strain_tn, sdev_tn, stest_tn]]
 
 
-
-
 trainer = EpochTrainer(model, optimizer, paras.epochs, Xtrain, Ytrain, strain, dttrain,
                        batch_size=paras.batch_size, gpu=GPU, bptt=paras.bptt, save_dir=paras.save,
                        logging=logging, debug=paras.debug)  #dttrain ignored for all but 'variable' methods
@@ -334,25 +305,18 @@ best_dev_error = 1.e5
 best_dev_epoch = 0
 error_test = -1
 
-max_epochs_no_decrease = 30
+max_epochs_no_decrease = 30  # If error in dev does not decrease in long time, the training will be paused early.
 
 try:  # catch error and redirect to logger
 
     for epoch in range(1, paras.epochs + 1):
 
-        #train 1 epoch
-        if not paras.test:
-            mse_train = trainer(epoch)
-        else:
-            mse_train = 0
-
-
+        mse_train = trainer(epoch)
         if epoch % paras.eval_epochs == 0:
             with torch.no_grad():
 
                 model.eval()
                 # (1) forecast on train data steps
-                # Ytrain_pred, htrain_pred = model(Xtrain_tn, dt=dttrain_tn)
 
                 Ytrain_pred, htrain_pred = model.encoding_plus_predict(
                     Xtrain_tn,  dttrain_tn,  Ytrain_tn[:, :paras.bptt], strain_tn[:, :paras.bptt], paras.bptt,

@@ -3,7 +3,6 @@
 
 import torch
 
-from taho.model import MIMO
 from common.modules import MSELoss_nan
 from torch import nn
 from util import interpolate_tensors_with_nan, get_mlp_network
@@ -141,6 +140,16 @@ class DFA_MIMO(nn.Module):
         return states[:, -1] if last else states
 
     def encoding_plus_predict(self, X_tn, dt_tn, history_Y_tn, history_s_tn, history_length, future_s_tn=None):
+        """
+
+        :param X_tn: Inputs with shape (bs, la+lb, k_in)
+        :param dt_tn: Time deltas with shape (bs, la+lb, 1)
+        :param history_Y_tn:
+        :param history_s_tn:
+        :param history_length:
+        :param future_s_tn:
+        :return:
+        """
 
         assert history_s_tn.shape[1] == history_length
 
