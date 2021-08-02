@@ -41,7 +41,9 @@ set up model
     variable: time-aware implementation
 """
 
-
+"""
+论文中的代码参数
+"""
 parser.add_argument("--test", action="store_true", help="Testing model in para.save")
 parser.add_argument("--time_aware", type=str, default='variable', choices=['no', 'input', 'variable'], help=methods)
 parser.add_argument("--model", type=str, default='GRU', choices=['GRU', 'GRUinc', 'ARNN', 'ARNNinc', 'DFA'])
@@ -90,6 +92,9 @@ parser.add_argument("--debug", action="store_true", help="debug mode, for accele
 paras = parser.parse_args()
 
 hard_reset = paras.reset
+"""
+results文件夹生成目录
+"""
 # if paras.save already exists and contains log.txt:
 # reset if not finished, or if hard_reset
 paras.save = os.path.join('results', paras.save)
@@ -125,6 +130,9 @@ logging('Args: {}'.format(paras))
 """
 fixed input parameters
 """
+"""
+目前测试集和训练集是一样的，没有分开
+"""
 frac_dev = 15/100
 frac_test = 15/100
 
@@ -132,6 +140,7 @@ GPU = torch.cuda.is_available()
 logging('Using GPU?', GPU)
 
 # set random seed for reproducibility
+#设置模型的随机数种子
 if paras.seed is None:
     paras.seed = np.random.randint(1000000)
 torch.manual_seed(paras.seed)
@@ -144,7 +153,9 @@ logging('Random seed', paras.seed)
 """
 Load data
 """
-
+"""
+分为debug和非debug模式的训练集和测试集文件
+"""
 
 if paras.debug: # Using short dataset for acceleration
     Xtrain, Ytrain, ttrain, strain = [df.to_numpy(dtype=np.float32) for df in get_Dataset('./data/Data_train_debug.csv')]
@@ -156,6 +167,7 @@ else:
     Xtrain, Ytrain, ttrain, strain = [df.to_numpy(dtype=np.float32) for df in get_Dataset('./data/train.csv')]
     Xdev, Ydev, tdev, sdev = [df.to_numpy(dtype=np.float32) for df in get_Dataset('./data/validate.csv')]
 
+#dt时间间隔
 dttrain = np.append(ttrain[1:] - ttrain[:-1], ttrain[1]-ttrain[0]).reshape(-1, 1)
 dtdev = np.append(tdev[1:] - tdev[:-1], tdev[1]-tdev[0]).reshape(-1, 1)
 
@@ -178,7 +190,9 @@ evaluation function
 RRSE error
 """
 
-
+"""
+评估指标，算rrse
+"""
 def prediction_error(truth, prediction):
     length = min(truth.shape[0], prediction.shape[0])
     truth, prediction = truth[-length:], prediction[-length:]
@@ -202,7 +216,9 @@ def prediction_error(truth, prediction):
 """
 
 #time_aware options
-
+"""
+把时间输入到模型的维度中插入进去
+"""
 if paras.time_aware == 'input':
 
     # expand X matrices with additional input feature, i.e., normalized duration dt to next sample
@@ -217,6 +233,7 @@ if paras.time_aware == 'input':
 
     k_in += 1
 
+#算均值，神经网络输入之前需要把数据做归一化
 Y_mean, Y_std = array_operate_with_nan(Ytrain, np.mean), array_operate_with_nan(Ytrain, np.std)
 Ytrain, Ydev, Ytest = [(Y - Y_mean) / Y_std for Y in [Ytrain, Ydev, Ytest]]
 
@@ -233,6 +250,10 @@ if paras.time_aware == 'no' or paras.time_aware == 'input':
 
 dt_mean = np.mean(dttrain)
 # set model:
+"""
+测试的，训练结束后自动测试
+非测试 生成个新模型，转到
+"""
 if not paras.test:
     # Generating a new model
     import yaml
@@ -249,7 +270,7 @@ if not paras.test:
 else:
     model = torch.load(model_test_path)
 
-
+#转到cuda
 if GPU:
     model = model.cuda()
 
@@ -266,6 +287,7 @@ optimizer = torch.optim.Adam(model.parameters(), lr=paras.lr, weight_decay=paras
 
 
 # prepare tensors for evaluation
+#np对的向量类型转化为torch的张量类型
 Xtrain_tn = torch.tensor(Xtrain, dtype=torch.float).unsqueeze(0)  # (1, Ntrain, k_in)
 Ytrain_tn = torch.tensor(Ytrain, dtype=torch.float).unsqueeze(0)  # (1, Ntrain, k_out)
 dttrain_tn = torch.tensor(dttrain, dtype=torch.float).unsqueeze(0)  # (1, Ntrain, 1)
@@ -280,7 +302,7 @@ Xtest_tn = torch.tensor(Xtest, dtype=torch.float).unsqueeze(0)
 Ytest_tn = torch.tensor(Ytest, dtype=torch.float).unsqueeze(0)
 dttest_tn = torch.tensor(dttest, dtype=torch.float).unsqueeze(0)
 stest_tn = torch.tensor(stest, dtype=torch.int).unsqueeze(0)  # (1, Ntrain, 1)
-
+#跑GPU的话，放在cuda上
 if GPU:
     Xtrain_tn = Xtrain_tn.cuda()
     Ytrain_tn = Ytrain_tn.cuda()
@@ -294,13 +316,13 @@ if GPU:
 
     strain_tn, sdev_tn, stest_tn = [s.cuda() for s in [strain_tn, sdev_tn, stest_tn]]
 
-
+#构建训练器，把训练的代码封装成一个类
 trainer = EpochTrainer(model, optimizer, paras.epochs, Xtrain, Ytrain, strain, dttrain,
                        batch_size=paras.batch_size, gpu=GPU, bptt=paras.bptt, save_dir=paras.save,
                        logging=logging, debug=paras.debug)  #dttrain ignored for all but 'variable' methods
 
 t00 = time()
-
+#参数，每训练10轮做一次评估，
 best_dev_error = 1.e5
 best_dev_epoch = 0
 error_test = -1
@@ -311,17 +333,21 @@ try:  # catch error and redirect to logger
 
     for epoch in range(1, paras.epochs + 1):
 
-        mse_train = trainer(epoch)
+        mse_train = trainer(epoch) #训练
         if epoch % paras.eval_epochs == 0:
-            with torch.no_grad():
+            with torch.no_grad(): #验证
                 model.eval()
                 # (1) forecast on train data steps
-
+                """
+                怎么拿系统过去的信息，得到初始状态，联合未来的输入做预测
+                """
                 Ytrain_pred, htrain_pred = model.encoding_plus_predict(
                     Xtrain_tn,  dttrain_tn,  Ytrain_tn[:, :paras.bptt], strain_tn[:, :paras.bptt], paras.bptt,
                     strain_tn[:, paras.bptt:])
                 error_train = prediction_error(Ytrain[paras.bptt:], t2np(Ytrain_pred))
-
+                """
+                训练集做个预测，得到指标画个图
+                """
                 if not os.path.exists('{}/predict_seq'.format(paras.save)):
                     os.mkdir('{}/predict_seq'.format(paras.save))
                 visualize_prediction(
@@ -335,7 +361,10 @@ try:  # catch error and redirect to logger
                 Ydev_pred, hdev_pred = model.encoding_plus_predict(
                     Xdev_tn,  dtdev_tn,  Ydev_tn[:, :paras.bptt], sdev_tn[:, :paras.bptt], paras.bptt,
                     sdev_tn[:, paras.bptt:])
-
+                error_train = prediction_error(Ytrain[paras.bptt:], t2np(Ytrain_pred))
+                """
+                验证集做个预测，算到指标打个日志
+                """
                 mse_dev = model.criterion(Ydev_pred, Ydev_tn[:, paras.bptt:]).item()
                 error_dev = prediction_error(Ydev[paras.bptt:], t2np(Ydev_pred))
 
@@ -351,7 +380,8 @@ try:  # catch error and redirect to logger
                                msg='train results (train error %.3f) at iter %d' % (error_train, epoch))
                 show_data(tdev[paras.bptt:], Ydev[paras.bptt:], t2np(Ydev_pred), paras.save, 'current_devresults',
                                msg='dev results (dev error %.3f) at iter %d' % (error_dev, epoch))
-
+                #验证集上，如果误差比最好的要小
+                #验证集上达到一个最好的效果，拿测试集做预测，看效果
                 # update best dev model
                 if error_dev < best_dev_error:
                     best_dev_error = error_dev
@@ -365,24 +395,25 @@ try:  # catch error and redirect to logger
                         stest_tn[:, paras.bptt:] if paras.dfa_known else None)
                     # mse_test = model.criterion(Ytest_pred, Ytest_tn[paras.bptt:]).item()
                     error_test = prediction_error(Ytest[paras.bptt:], t2np(Ytest_pred))
+                    #根据预测的结果，看一下模型每个时间点的状态分类
                     test_dfa_state_pred_array = model.select_dfa_states(test_state_pred[0]).int().detach().cpu().numpy()
 
                     log_value('test/corresp_error', error_test, epoch)
                     logging('new best dev error %.3f'%best_dev_error)
-
+                    #将状态结果保存到目录里面
                     np.save('{}/predict_seq/test_result_{}'.format(paras.save, epoch),
                             np.stack([Ytest[paras.bptt:], t2np(Ytest_pred)]))
 
                     np.save('{}/predict_seq/dev_result_{}'.format(paras.save, epoch),
                             np.stack([Ydev[paras.bptt:], t2np(Ydev_pred)]))
-
+                    #画图可视化出来，画验证集
                     visualize_prediction(
                         Ytest[paras.bptt:] * Y_std + Y_mean, t2np(Ytest_pred) * Y_std + Y_mean, test_dfa_state_pred_array,
                         os.path.join(paras.save, 'predict_seq'),
-                        seg_length=paras.visualization_len, dir_name='visualizations-test-%s' % str(best_dev_epoch))
+                        seg_length=paras.visualization_len, dir_name='visualizations-test-%s' % str(best_dev_epoch))# 模型自己预测的
 
                     visualize_prediction(
-                        Ydev[paras.bptt:] * Y_std + Y_mean, t2np(Ydev_pred) * Y_std + Y_mean, stest[paras.bptt:],
+                        Ydev[paras.bptt:] * Y_std + Y_mean, t2np(Ydev_pred) * Y_std + Y_mean, stest[paras.bptt:],#stest状态标签
                         os.path.join(paras.save, 'predict_seq'),
                         seg_length=paras.visualization_len, dir_name='visualizations-dev-%s' % str(best_dev_epoch))
 
@@ -395,7 +426,7 @@ try:  # catch error and redirect to logger
 
                     # save model
                     #torch.save(model.state_dict(), os.path.join(paras.save, 'best_dev_model_state_dict.pt'))
-                    torch.save(model, os.path.join(paras.save, 'best_dev_model.pt'))
+                    torch.save(model, os.path.join(paras.save, 'best_dev_model.pt'))  #存最好的模型
 
                     # save dev and test predictions of best dev model
                     pickle.dump({'t_dev': tdev, 'y_target_dev': Ydev, 'y_pred_dev': t2np(Ydev_pred),
@@ -414,7 +445,7 @@ try:  # catch error and redirect to logger
               'at epoch', best_dev_epoch,
               'with corresp. test error', error_test)
 
-
+# 大概流程，训练后用验证集验证一下，然后用测试集画图
 
 
 except:

@@ -12,6 +12,7 @@ by chunking into bbtt-long segments.
 
 
 class EpochTrainer(object):
+    #前期的准备 np转cuda
     def __init__(self, model, optimizer, epochs, X, Y, states, dt, batch_size=1, gpu=False, bptt=50,
                  save_dir='./', short_encoding=False, logging=None, debug=False):
 
@@ -91,9 +92,9 @@ class EpochTrainer(object):
         # all_states_posterior = self.model.rnn_encoder(self.Ytrain1)
 
     def __call__(self, epoch):
-        np.random.shuffle(self.train_inds)
+        np.random.shuffle(self.train_inds) #每个下标对应一个窗口，打散
 
-        # iterations within current epoch
+        # iterations within current epoch 每个epoch先初始化一个变量
         epoch_loss = 0.
         epoch_loss_classification = 0.
         epoch_loss_pred = 0.
@@ -122,10 +123,10 @@ class EpochTrainer(object):
         dfa_states_classifications_pred_all = []
         dfa_states_classifications_label_all = []
 
-        for i in range(int(np.ceil(len(self.train_inds) / self.batch_size))):
+        for i in range(int(np.ceil(len(self.train_inds) / self.batch_size))):  #每次训练batch_size次窗口
             # get indices for next batch
             iter_inds = self.train_inds[i * self.batch_size: (i + 1) * self.batch_size]
-            iter_inds_next = [x+self.w for x in iter_inds]
+            iter_inds_next = [x+self.w for x in iter_inds]  #把
             bs = len(iter_inds)
 
             # get initial states for next batch
@@ -134,12 +135,12 @@ class EpochTrainer(object):
             # get batch input and target data
             cum_bs += bs
 
-            pre_X = self.Xtrain[iter_inds, :, :]  # (batch, bptt, k_in)
+            pre_X = self.Xtrain[iter_inds, :, :]  # (batch, bptt, k_in)  #过去的xy
             pre_dt = self.dttrain[iter_inds, :, :]  # (batch, bptt, 1)
             pre_Y_target = self.Ytrain[iter_inds, :, :]
             pre_s = self.states_train[iter_inds, :, :]
 
-            X = self.Xtrain[iter_inds_next, :, :]  # (batch, bptt, k_in)
+            X = self.Xtrain[iter_inds_next, :, :]  # (batch, bptt, k_in)   #未来的xy
             dt = self.dttrain[iter_inds_next, :, :]  # (batch, bptt, 1)
             Y_target = self.Ytrain[iter_inds_next, :, :]
             s = self.states_train[iter_inds_next]
@@ -149,7 +150,7 @@ class EpochTrainer(object):
             self.model.zero_grad()
 
             pre_outputs, pre_states = self.model.forward_posterior(torch.cat([pre_X, pre_Y_target], dim=-1), dfa_states=pre_s, dt=pre_dt)
-            state0 = pre_states[:, -1]
+            state0 = pre_states[:, -1]    #得到初始状态
 
             with tr('forward'):
                 Y_pred, states_pred = self.model.forward_prediction(X, state0=state0, dfa_states=s, dt=dt)
@@ -202,7 +203,7 @@ class EpochTrainer(object):
                 #     )))
 
             else:
-
+                #自动状态转换相关
                 loss_classification = self.class_criterion(
                     all_dfa_states_prob.reshape(-1, all_dfa_states_prob.shape[-1]).contiguous(),
                     states_label.reshape(-1).contiguous(),
@@ -213,12 +214,12 @@ class EpochTrainer(object):
             loss = loss_classification + loss_pred
 
             with tr('backward'):
-                loss.backward()
+                loss.backward() #反向传播
 
             # debug: observe gradients
             self.optimizer.step()
 
-            epoch_loss += loss.item() * bs
+            epoch_loss += loss.item() * bs #梯度下降
             epoch_loss_classification += loss_classification.item() * bs
             epoch_loss_pred += loss_pred.item() * bs
 

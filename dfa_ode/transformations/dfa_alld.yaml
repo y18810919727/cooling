@@ -17,13 +17,13 @@ ode_2order: False
 Ly_share: True
 
 # The type of odes.y:
-#   s: stationary           dy_dt = f(ht) - yt
+#   s: stationary           dy_dt = f(ht) - yt   稳定性
 #   n: non-stationary       dy_dt = f(ht)
 #   d: directed prediction  yt = f(ht)
 odes:
 - name: unknown
   cell: gru
-  y_type: ['d', 'd', 'd']
+  y_type: ['d', 'd', 'd']   #三输出
 
 - name: closed
   cell: gru

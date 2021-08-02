@@ -51,13 +51,13 @@ class DFA_MIMO(nn.Module):
         self.expand_input_out = nn.Sequential(nn.Linear(k_in + k_out, k_state), nn.Tanh())
 
         # self.state0 = nn.Parameter(torch.zeros(k_state,), requires_grad=True)  # trainable initial state
-        self.dfa_odes_forward = DFA_ODENets(ode_nums, layers, k_state, k_out, k_state, y_mean, y_std,
+        self.dfa_odes_forward = DFA_ODENets(ode_nums, layers, k_state, k_out, k_state, y_mean, y_std,#前项预测，输入输入量做预测
                                                   odes_para=odes_para, ode_2order=ode_2order,
                                                   state_transformation_predictor=state_transformation_predictor,
                                                   transformations_rules=transformations, cell_type=cell_type,
                                                   Ly_share=Ly_share)
-        self.dfa_odes_posterior = DFA_ODENets(ode_nums, layers, k_state, k_out, k_state, y_mean, y_std,
-                                                    odes_para=odes_para, ode_2order=ode_2order,
+        self.dfa_odes_posterior = DFA_ODENets(ode_nums, layers, k_state, k_out, k_state, y_mean, y_std,#后验编码，输入输出量做编码
+                                                   odes_para=odes_para, ode_2order=ode_2order,
                                                     cell_type=cell_type,
                                                     Ly_share=Ly_share)
         #self.register_buffer('state0', torch.zeros(k_state, ))  # fixed zero initial state
@@ -86,11 +86,13 @@ class DFA_MIMO(nn.Module):
             self.dfa_odes_posterior, self.expand_input_out, inputs, state0=state0, dfa_states=dfa_states, dt=dt, **kwargs
         )
 
-    def forward_prediction(self, inputs, state0=None, dfa_states=None, dt=None, **kwargs):  # potential kwargs: dt
+    def forward_prediction(self, inputs, state0=None, dfa_states=None, dt=None, **kwargs):  # potential kwargs: dt #预测
         return self.model_call(
             self.dfa_odes_forward, self.expand_input, inputs, state0=state0, dfa_states=dfa_states, dt=dt, **kwargs
         )
-
+    """
+    modelcall,给定初始状态，将输入扔进去，更新状态，预测
+    """
     def model_call(self, model, expand_cell, inputs, state0=None, dfa_states=None, dt=None, **kwargs):
         """
         :param model: dfa_odes
@@ -142,12 +144,12 @@ class DFA_MIMO(nn.Module):
     def encoding_plus_predict(self, X_tn, dt_tn, history_Y_tn, history_s_tn, history_length, future_s_tn=None):
         """
 
-        :param X_tn: Inputs with shape (bs, la+lb, k_in)
-        :param dt_tn: Time deltas with shape (bs, la+lb, 1)
-        :param history_Y_tn: shape(bs, la, k_out)
-        :param history_s_tn: shape(bs, la, 1)
+        :param X_tn: Inputs with shape (bs, la+lb, k_in)    la+lb过去序列的长度和未来序列的长度
+        :param dt_tn: Time deltas with shape (bs, la+lb, 1)  时间，也是la+lb的长度
+        :param history_Y_tn: shape(bs, la, k_out)      历史的y的长度
+        :param history_s_tn: shape(bs, la, 1)          过去的状态标记，手工打的标签
         :param history_length: la
-        :param future_s_tn: shape(bs, lb, 1)
+        :param future_s_tn: shape(bs, lb, 1)              未来的(验证集给了
         :return:
         """
 
@@ -158,9 +160,9 @@ class DFA_MIMO(nn.Module):
 
         # Y_pred, h_pred = model(X_tn, state0=htrain_pred[:, -1, :], dt=dt_tn)
         Y_pred, h_pred = self.forward_prediction(
-            predicted_X_tn,
-            state0=self.generate_state0(history_X_tn, history_Y_tn, history_s_tn, history_dt_tn),
-            dfa_states=future_s_tn,
-            dt=predicted_dt_tn)
+            predicted_X_tn,          #x_tn的后一半拿出来
+            state0=self.generate_state0(history_X_tn, history_Y_tn, history_s_tn, history_dt_tn),   #初始状态，编码模块，把过去这些东西扔进去做编码
+            dfa_states=future_s_tn,        #未来的状态
+            dt=predicted_dt_tn)            #未来的时间
 
-        return Y_pred, h_pred
+        return Y_pred, h_pred              #返回预测结果和预测隐变量的结果

@@ -1,17 +1,17 @@
 ode_nums: 5
 # 'Ti', 'Pcooling', 'Power cooling'
 # Definitions of DFA states  ['unknown', 'closed', 'start-1', 'start-2', 'cooling', 'stop']
-transformations:
+transformations:   #规则转移
   - from: 1
     to: 2
     rules:
-      - [0 , geq , 19.9]
+      - [0 , geq , 19.9]    #满足这些规则，就能从一跳到2，1和2靠规则转移
   - from: 4
     to: 1
     rules:
     - [0 ,leq, 12]
 predictors:
-  - ['predict', 2]
+  - ['predict', 2]   #2和3需要预测期
   - ['predict', 3]
 ode_2order: False
 Ly_share: False

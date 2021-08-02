@@ -39,7 +39,7 @@ class ODEMergeCell(nn.Module):
         if self.ode_2order:
             assert k_state % 2 == 0, 'ode_2order=True mode requires the k_state is even.'
 
-        if cell == 'gru':
+        if cell == 'gru':   #目前跑的都是gru cell
             self.cell = nn.GRUCell(k_state, k_state)
         elif cell == 'mlp':
             self.cell = MLPCell(k_state, k_state, bias=True)

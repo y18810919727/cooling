@@ -25,7 +25,7 @@ class DFA_ODENets(nn.Module):
         self.linear_decoder = linear_decoder
         self.y_mean = nn.Parameter(torch.FloatTensor(y_mean), requires_grad=False)
         self.y_std = nn.Parameter(torch.FloatTensor(y_std), requires_grad=False)
-        if cell_type == 'merge':
+        if cell_type == 'merge':   #odecell
             ODECellClass = ODEMergeCell
         # elif cell_type == 'cde':
         #     ODECellClass = CDECell
@@ -52,7 +52,7 @@ class DFA_ODENets(nn.Module):
                 else:
                     raise NotImplementedError
         if transformations_rules is not None:
-            for t in transformations_rules:
+            for t in transformations_rules:   #遍历所有转移规则
                 self.add_transform(t['from'], t['to'], t['rules'])
 
     def make_decoder(self, k_state, k_out):
@@ -66,7 +66,7 @@ class DFA_ODENets(nn.Module):
             )
         return Ly
 
-    def add_transform(self, s1, s2, rules):
+    def add_transform(self, s1, s2, rules):   # 读文件，加规则
         """
         Generating a transformation in DFA
         :param s1:
@@ -120,7 +120,7 @@ class DFA_ODENets(nn.Module):
 
                     extra_info['predicted_stop_cum_time'][chosen_indices] = predicted_cum_t
                     state_index_plus_one = (state_index + 1) % self.ode_nums
-                    if state_index_plus_one == 0:
+                    if state_index_plus_one == 0:   #状态加1
                         state_index_plus_one = 1
 
                     new_s[indices_time_out] = state_index_plus_one
@@ -132,7 +132,7 @@ class DFA_ODENets(nn.Module):
                     # new_s[chosen_indices[indices_time_out]] = state_index_plus_one
                     # new_s_prob[chosen_indices][indices_time_out][:, state_index_plus_one] = 1.0
 
-                elif isinstance(predictor, Classification):
+                elif isinstance(predictor, Classification):# 废弃
                     # Applying the classifying network to make multi-classification
                     pred_prob = self.state_transformation_predictor[str(state_index)](
                         torch.cat([ht[chosen_indices], cum_t[chosen_indices]], dim=-1)
@@ -140,7 +140,7 @@ class DFA_ODENets(nn.Module):
                     pred_label = pred_prob.argmax(dim=-1)
                     new_s[chosen_indices] = pred_label
                     new_s_prob[chosen_indices] = pred_prob
-            else:
+            else:  #规则转换
                 # If there is no Classification network in state_transformation_predictor,
                 # applying the DFA rules for transformations.
                 with torch.no_grad():
@@ -165,7 +165,7 @@ class DFA_ODENets(nn.Module):
                     new_s[chosen_indices[boolean_results]] = s2
                     new_s_prob[chosen_indices[boolean_results], s2] = 1.0
 
-        return new_s.unsqueeze(dim=-1), new_s_prob, extra_info
+        return new_s.unsqueeze(dim=-1), new_s_prob, extra_info #返回新的状态
 
     def decode_y(self, state):
         return state[..., :self.k_out]
@@ -181,7 +181,7 @@ class DFA_ODENets(nn.Module):
     def select_dfa_states(states):
         return states[:, -1:]
 
-    def combinational_ode(self, s, ht, xt, dt):
+    def combinational_ode(self, s, ht, xt, dt): #对于不同的状态，找对应的ode
         nht = torch.zeros_like(ht)
         for i in range(self.ode_nums):
             indices = (s.squeeze(dim=-1) == i)
@@ -189,7 +189,7 @@ class DFA_ODENets(nn.Module):
                 nht[indices] = self.odes[i](ht[indices], xt[indices], dt[indices])
         return nht
 
-    def forward(self, state, xt, dt, new_s=None):
+    def forward(self, state, xt, dt, new_s=None):  #给xt,dt预测新的输出或者state
         """
 
         :param state: The concatenation of ht, cum_t, cur_s : (bs, k_state + 2)
@@ -209,7 +209,7 @@ class DFA_ODENets(nn.Module):
                 torch.cat([new_ht, cum_t, s], dim=-1),
                 xt
             )
-        updated_indices = (s.squeeze(dim=-1) != new_s.squeeze(dim=-1))
+        updated_indices = (s.squeeze(dim=-1) != new_s.squeeze(dim=-1))   #更新下标，如果状态转移，那么那个状态的下标页转为0
         new_cum_t[updated_indices] = 0
 
         return self.decode_y(new_ht), torch.cat([new_ht, new_cum_t, new_s.float()], dim=-1)

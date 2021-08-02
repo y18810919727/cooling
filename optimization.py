@@ -46,42 +46,42 @@ def main(paras):
     if not os.path.exists(save_dir):
         os.mkdir(save_dir)
     device = torch.device('cuda:0') if torch.cuda.is_available() else torch.device('cpu')
-    model = torch.load(os.path.join('optimization', 'model', paras.model + '.pt'), map_location=device)
+    model = torch.load(os.path.join('optimization', 'model', paras.model + '.pt'), map_location=device)  #load模型
     model.dfa_odes_forward.transforms = defaultdict(list)
     model.dfa_odes_forward.add_transform(1, 2, [[0, 'geq', paras.high]])
     model.dfa_odes_forward.add_transform(4, 5, [[0, 'leq', paras.low]])
     data_path = os.path.join('optimization', 'data', paras.data)
 
-    Xtest, Ytest, ttest, stest = [df.to_numpy(dtype=np.float32) for df in get_Dataset(data_path)]
+    Xtest, Ytest, ttest, stest = [df.to_numpy(dtype=np.float32) for df in get_Dataset(data_path)] #找到测试集
 
     dttest = np.append(ttest[1:] - ttest[:-1], ttest[1]-ttest[0]).reshape(-1, 1)
 
-    Y_mean, Y_std = array_operate_with_nan(Ytest, np.mean), array_operate_with_nan(Ytest, np.std)
+    Y_mean, Y_std = array_operate_with_nan(Ytest, np.mean), array_operate_with_nan(Ytest, np.std)   #归一化
     Ytest = (Ytest - Y_mean) / Y_std
     X_mean, X_std = array_operate_with_nan(Xtest, np.mean), array_operate_with_nan(Xtest, np.std)
     Xtest = (Xtest - X_mean) / X_std
 
-    Xtest_tn = torch.tensor(Xtest, dtype=torch.float).unsqueeze(0)
+    Xtest_tn = torch.tensor(Xtest, dtype=torch.float).unsqueeze(0)          #转张量
     Ytest_tn = torch.tensor(Ytest, dtype=torch.float).unsqueeze(0)
     dttest_tn = torch.tensor(dttest, dtype=torch.float).unsqueeze(0)
     stest_tn = torch.tensor(stest, dtype=torch.int).unsqueeze(0)  # (1, Ntrain, 1)
 
-    if torch.cuda.is_available():
+    if torch.cuda.is_available():                                               #转cuda
         Xtest_tn = Xtest_tn.cuda()
         Ytest_tn = Ytest_tn.cuda()
         dttest_tn = dttest_tn.cuda()
         stest_tn = stest_tn.cuda()
 
-    Ytest_pred, test_state_pred = model.encoding_plus_predict(
+    Ytest_pred, test_state_pred = model.encoding_plus_predict(          #模型预测
         Xtest_tn,  dttest_tn,  Ytest_tn[:, :paras.bptt], stest_tn[:, :paras.bptt], paras.bptt, None)
 
-    test_dfa_state_pred_array = model.select_dfa_states(test_state_pred[0]).int().detach().cpu().numpy()
+    test_dfa_state_pred_array = model.select_dfa_states(test_state_pred[0]).int().detach().cpu().numpy() #把状态也拿出来
 
-    visualize_prediction(
+    visualize_prediction(       #可视化
         Ytest[paras.bptt:] * Y_std + Y_mean, t2np(Ytest_pred) * Y_std + Y_mean, test_dfa_state_pred_array, save_dir,
         seg_length=2000, dir_name='vis-%.1f-%.1f' % (paras.low, paras.high))
 
-    predicted_power = (t2np(Ytest_pred) * Y_std + Y_mean)[..., -1].reshape(-1)
+    predicted_power = (t2np(Ytest_pred) * Y_std + Y_mean)[..., -1].reshape(-1)  #算power
     predicted_power[predicted_power < 0] = 0
     sum_power = (
             predicted_power *
@@ -96,7 +96,7 @@ if __name__ == '__main__':
     paras = parser.parse_args()
     paras.save_dir = os.path.join('optimization', 'results', paras.model)
 
-    sum_powers = []
+    sum_powers = []         #遍历从min到max
     Min = 13
     Max = 19
     step = 0.5
@@ -112,7 +112,7 @@ if __name__ == '__main__':
 
         else:
             sum_powers.append(main(paras))
-    from matplotlib import pyplot as plt
+    from matplotlib import pyplot as plt            #画图
     plt.plot(np.arange(Min, Max, step), sum_powers)
     plt.xlabel('The set point of lower bound temperature in cooling system')
     plt.ylabel('Power Consumption')
