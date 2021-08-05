@@ -2,4 +2,4 @@
 
 cd ..
 
-CUDA_VISIBLE_DEVICES=3 python main.py --save 0802_predict_ns_state4 --model DFA --dfa_yaml dfa_ns
+CUDA_VISIBLE_DEVICES=7 python main.py --save 0804_predict_ns_state4 --model DFA --dfa_yaml dfa_ns

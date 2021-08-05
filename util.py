@@ -159,14 +159,14 @@ def process_dataset(df):
 
     df = add_state_label(df)
     from datetime import datetime
-    beg_time_str = df['Time'].iloc[0]
+    beg_time_str = df['Time'].iloc[0] #取第0行数据
     beg_time = datetime.strptime(beg_time_str[:-3]+beg_time_str[-2:], '%Y-%m-%dT%H:%M:%S%z')
-    df['time'] = df['Time'].apply(
+    df['time'] = df['Time'].apply(  #按照时间按0.1每步化成序列
         lambda time_str: (datetime.strptime(time_str[:-3]+time_str[-2:], '%Y-%m-%dT%H:%M:%S%z')-beg_time
                           ).total_seconds()/10
     )
-    df['delta'] = df['time'][1:] - df['time'][:-1]
-    df.interpolate(axis=0, method='linear', limit_direction='both', inplace=True)
+    df['delta'] = df['time'][1:] - df['time'][:-1]   #为啥按索引对齐运算，以至于结果都等于0
+    df.interpolate(axis=0, method='linear', limit_direction='both', inplace=True)  #按列线性插值
     return df
 
 
@@ -201,17 +201,31 @@ def visualize_prediction(Y_label, Y_pred, s_test, base_dir, seg_length=500, dir_
         outputs_names = ['Ti', 'Pcooling', 'Power cooling']
         classes = ['unknown', 'closed', 'start-1', 'start-2', 'cooling']
         for i, y_name in enumerate(outputs_names):
-            plt.subplot(3, 1, i + 1)
+            plt.subplot(6, 2, i * 2 + 1)
             y_label = y_label_seg[:, i]
             y_pred = y_pred_seg[:, i]
-            plt.plot(X, y_label, '-k', label='Time Series')
             for state in range(max_state+1):
                 indices = (s_test_seg.squeeze(axis=-1) == state)
                 scatter = plt.scatter(X[indices], y_pred[indices], label='pred-'+classes[state], s=5, marker='o')
             plt.xlabel('indexes')
             plt.ylabel(y_name)
             plt.legend()
+            plt.subplot(6, 2, i * 2 + 2)
 
+            plt.plot(X, y_label, '-k', label='Time Series')
+            plt.xlabel('indexes')
+            plt.ylabel(y_name)
+            plt.legend()
+            plt.subplot(6, 1, i +4)
+            y_label = y_label_seg[:, i]
+            y_pred = y_pred_seg[:, i]
+            plt.plot(X, y_label, '-k', label='Time Series')
+            for state in range(max_state + 1):
+                indices = (s_test_seg.squeeze(axis=-1) == state)
+                scatter = plt.scatter(X[indices], y_pred[indices], label='pred-' + classes[state], s=5, marker='o')
+            plt.xlabel('indexes')
+            plt.ylabel(y_name)
+            plt.legend()
         plt.savefig(os.path.join(
             base_dir, dir_name, '%i-%i-%i.png' % (ID, begin, begin + seg_length)
         ))

@@ -71,7 +71,7 @@ parser.add_argument("--l2", type=float, default=0., help="L2 regularization")
 
 # admin
 parser.add_argument("--save", type=str, default='results', help="experiment logging folder")
-parser.add_argument("--eval_epochs", type=int, default=10, help="validation every so many epochs")
+parser.add_argument("--eval_epochs", type=int, default=2, help="validation every so many epochs")
 parser.add_argument("--seed", type=int, default=None, help="random seed")
 
 
@@ -97,7 +97,7 @@ results文件夹生成目录
 """
 # if paras.save already exists and contains log.txt:
 # reset if not finished, or if hard_reset
-paras.save = os.path.join('results', paras.save)
+paras.save = os.path.join('results', paras.save) #路径拼接，改变paras.save为'results/tmp'
 if paras.test:
     model_test_path = os.path.join(paras.save, 'best_dev_model.pt')
     paras.save = os.path.join(paras.save, 'test')
@@ -107,7 +107,7 @@ if paras.test:
     paras.epochs = 1
 
 log_file = os.path.join(paras.save, 'log.txt')
-if os.path.isfile(log_file) and not paras.test:
+if os.path.isfile(log_file) and not paras.test:  #判断是否为文件
     with open(log_file, 'r', encoding='utf-8', errors='ignore') as f:
         content = f.read()
         completed = 'Finished' in content
@@ -115,7 +115,7 @@ if os.path.isfile(log_file) and not paras.test:
             print('Exit; already completed and no hard reset asked.')
             sys.exit()  # do not overwrite folder with current experiment
         else:  # reset folder
-            shutil.rmtree(paras.save, ignore_errors=True)
+            shutil.rmtree(paras.save, ignore_errors=True) #递归地删除文件夹
 
 
 
@@ -131,7 +131,7 @@ logging('Args: {}'.format(paras))
 fixed input parameters
 """
 """
-目前测试集和训练集是一样的，没有分开
+目前测试集和验证集是一样的，没有分开
 """
 frac_dev = 15/100
 frac_test = 15/100
@@ -156,32 +156,40 @@ Load data
 """
 分为debug和非debug模式的训练集和测试集文件
 """
-
+datasets=['Data_train_1_7_1','Data_train_1_8k','Data_train_3_8k','Data_train_4_2k','Data_validate']
 if paras.debug: # Using short dataset for acceleration
-    Xtrain, Ytrain, ttrain, strain = [df.to_numpy(dtype=np.float32) for df in get_Dataset('./data/Data_train_debug.csv')]
-    Xdev, Ydev, tdev, sdev = [df.to_numpy(dtype=np.float32) for df in get_Dataset('./data/Data_validate_short_debug.csv')]
+     Xtrain, Ytrain, ttrain, strain = [df.to_numpy(dtype=np.float32) for df in get_Dataset('./data/Data_train_debug.csv')]
+     Xdev, Ydev, tdev, sdev = [df.to_numpy(dtype=np.float32) for df in get_Dataset('./data/Data_validate_short_debug.csv')]
 else:
-    # Xtrain, Ytrain, ttrain, strain = [df.to_numpy(dtype=np.float32) for df in get_Dataset('./data/Data_train.csv')]
-    # Xdev, Ydev, tdev, sdev = [df.to_numpy(dtype=np.float32) for df in get_Dataset('./data/Data_validate_short.csv')]
+    Xtrain=[]
+    Ytrain=[]
+    ttrain=[]
+    strain=[]
+    for everdata in datasets:
+        X, Y, t, s = [df.to_numpy(dtype=np.float32) for df in get_Dataset('./mydata/Front_'+everdata+'.csv')]
+        Xtrain = np.append(Xtrain,X).reshape(-1, 2)
+        Ytrain = np.append(Ytrain,Y).reshape(-1, 3)
+        ttrain = np.append(ttrain,t).reshape(-1, 1)
+        strain = np.append(strain,s).reshape(-1, 1)
+    Xdev, Ydev, tdev, sdev = [df.to_numpy(dtype=np.float32) for df in get_Dataset('./mydata/Back_Data_train_1_7_1.csv')]
 
-    Xtrain, Ytrain, ttrain, strain = [df.to_numpy(dtype=np.float32) for df in get_Dataset('./data/train.csv')]
-    Xdev, Ydev, tdev, sdev = [df.to_numpy(dtype=np.float32) for df in get_Dataset('./data/validate.csv')]
-
-#dt时间间隔
-dttrain = np.append(ttrain[1:] - ttrain[:-1], ttrain[1]-ttrain[0]).reshape(-1, 1)
+    #dt时间间隔
+dttrain = np.append(ttrain[1:] - ttrain[:-1], ttrain[1]-ttrain[0]).reshape(-1, 1)  #化为1列
+dttrain[dttrain < -0.1] = 0.1
 dtdev = np.append(tdev[1:] - tdev[:-1], tdev[1]-tdev[0]).reshape(-1, 1)
-
 Xtest, Ytest, ttest, dttest, stest = Xdev, Ydev, tdev, dtdev, sdev
 
 
-k_in = Xtrain.shape[1]
-k_out = Ytrain.shape[1]
+k_in = Xtrain.shape[1]  #输入2维
+k_out = Ytrain.shape[1] #输出3维
+
+
+Ntrain = Xtrain.shape[0]  #序列长度
 
 Ndev = Xdev.shape[0]
 Ntest = Xtest.shape[0]
-Ntrain = Xtrain.shape[0]
 
-N = Ndev + Ntest + Ntrain
+N = Ndev + Ntest + Ntrain   #总长度
 
 logging('first {} for training, then {} for development and {} for testing'.format(Ntrain, Ndev, Ntest))
 
@@ -233,9 +241,9 @@ if paras.time_aware == 'input':
 
     k_in += 1
 
-#算均值，神经网络输入之前需要把数据做归一化
+#算均值和标准差，神经网络输入之前需要把数据做归一化
 Y_mean, Y_std = array_operate_with_nan(Ytrain, np.mean), array_operate_with_nan(Ytrain, np.std)
-Ytrain, Ydev, Ytest = [(Y - Y_mean) / Y_std for Y in [Ytrain, Ydev, Ytest]]
+Ytrain, Ydev, Ytest = [(Y - Y_mean) / Y_std for Y in [Ytrain, Ydev, Ytest]]     #标准化处理
 
 X_mean, X_std = array_operate_with_nan(Xtrain, np.mean), array_operate_with_nan(Xtrain, np.std)
 Xtrain, Xdev, Xtest = [(X - X_mean) / X_std for X in [Xtrain, Xdev, Xtest]]
@@ -283,7 +291,7 @@ for n, p in model.named_parameters():
 logging('Architecture: ', model)
 log_value('model/params', params, 0)
 
-optimizer = torch.optim.Adam(model.parameters(), lr=paras.lr, weight_decay=paras.l2)
+optimizer = torch.optim.Adam(model.parameters(), lr=paras.lr, weight_decay=paras.l2)  #优化算法
 
 
 # prepare tensors for evaluation
@@ -316,6 +324,7 @@ if GPU:
 
     strain_tn, sdev_tn, stest_tn = [s.cuda() for s in [strain_tn, sdev_tn, stest_tn]]
 
+
 #构建训练器，把训练的代码封装成一个类
 trainer = EpochTrainer(model, optimizer, paras.epochs, Xtrain, Ytrain, strain, dttrain,
                        batch_size=paras.batch_size, gpu=GPU, bptt=paras.bptt, save_dir=paras.save,
@@ -335,8 +344,8 @@ try:  # catch error and redirect to logger
 
         mse_train = trainer(epoch) #训练
         if epoch % paras.eval_epochs == 0:
-            with torch.no_grad(): #验证
-                model.eval()
+            with torch.no_grad(): #验证  停止梯度计算
+                model.eval()      #测试
                 # (1) forecast on train data steps
                 """
                 怎么拿系统过去的信息，得到初始状态，联合未来的输入做预测
@@ -389,40 +398,70 @@ try:  # catch error and redirect to logger
                     log_value('dev/best_error', best_dev_error, epoch)
 
                     #corresponding test result:
+                    for everdata in datasets:
+                        Xtest, Ytest, ttest, stest = [df.to_numpy(dtype=np.float32) for df in
+                                                  get_Dataset('./mydata/Back_'+everdata+'.csv')]
+                        dttest = np.append(ttest[1:] - ttest[:-1], ttest[1] - ttest[0]).reshape(-1, 1)
 
-                    Ytest_pred, test_state_pred = model.encoding_plus_predict(
-                        Xtest_tn,  dttest_tn,  Ytest_tn[:, :paras.bptt], stest_tn[:, :paras.bptt], paras.bptt,
-                        stest_tn[:, paras.bptt:] if paras.dfa_known else None)
-                    # mse_test = model.criterion(Ytest_pred, Ytest_tn[paras.bptt:]).item()
-                    error_test = prediction_error(Ytest[paras.bptt:], t2np(Ytest_pred))
-                    #根据预测的结果，看一下模型每个时间点的状态分类
-                    test_dfa_state_pred_array = model.select_dfa_states(test_state_pred[0]).int().detach().cpu().numpy()
 
-                    log_value('test/corresp_error', error_test, epoch)
-                    logging('new best dev error %.3f'%best_dev_error)
-                    #将状态结果保存到目录里面
-                    np.save('{}/predict_seq/test_result_{}'.format(paras.save, epoch),
-                            np.stack([Ytest[paras.bptt:], t2np(Ytest_pred)]))
+                        Ytest = (Ytest - Y_mean) / Y_std
+                        Xtest = (Xtest - X_mean) / X_std
+
+                        Xtest_tn = torch.tensor(Xtest, dtype=torch.float).unsqueeze(0)
+                        Ytest_tn = torch.tensor(Ytest, dtype=torch.float).unsqueeze(0)
+                        dttest_tn = torch.tensor(dttest, dtype=torch.float).unsqueeze(0)
+                        stest_tn = torch.tensor(stest, dtype=torch.int).unsqueeze(0)  # (1, Ntrain, 1)
+
+                        Xtest_tn = Xtest_tn.cuda()
+                        Ytest_tn = Ytest_tn.cuda()
+                        dttest_tn = dttest_tn.cuda()
+
+                        stest_tn = stest_tn.cuda()
+
+                        Ytest_pred, test_state_pred = model.encoding_plus_predict(
+                            Xtest_tn,  dttest_tn,  Ytest_tn[:, :paras.bptt], stest_tn[:, :paras.bptt], paras.bptt,
+                            stest_tn[:, paras.bptt:] if paras.dfa_known else None)
+                        # mse_test = model.criterion(Ytest_pred, Ytest_tn[paras.bptt:]).item()
+                        error_test = prediction_error(Ytest[paras.bptt:], t2np(Ytest_pred))
+                        #根据预测的结果，看一下模型每个时间点的状态分类
+                        test_dfa_state_pred_array = model.select_dfa_states(test_state_pred[0]).int().detach().cpu().numpy()
+
+                        log_value('test/corresp_error', error_test, epoch)
+                        logging('new best dev error %.3f'%best_dev_error)
+
+                        predict_path = os.path.join(paras.save, 'predict_seq/visualizations-test-{}'.format(epoch))
+                        if not os.path.exists(predict_path):
+                            os.mkdir(predict_path)
+
+                        #将状态结果保存到目录里面
+                        np.save('{}/predict_seq/visualizations-test-{}/{}_test_result_{}'.format(paras.save,epoch,everdata, epoch),
+                                np.stack([Ytest[paras.bptt:], t2np(Ytest_pred)]))
+
+
+                        #画图可视化出来，画测试集
+                        visualize_prediction(
+                            Ytest[paras.bptt:] * Y_std + Y_mean, t2np(Ytest_pred) * Y_std + Y_mean, test_dfa_state_pred_array,
+                            os.path.join(paras.save, 'predict_seq'),
+                            seg_length=paras.visualization_len, dir_name='visualizations-test-%s/%s' % (str(best_dev_epoch) , everdata))# 模型自己预测的
+
+
+                        show_data(ttest, Ytest, t2np(Ytest_pred), paras.save+'/predict_seq/visualizations-test-%s'  % (str(best_dev_epoch)),
+                                  'best_dev_testresults_%s_' % everdata,
+                                  msg='test results (test error %.3f) at iter %d (=best dev)' % (error_test, epoch))
 
                     np.save('{}/predict_seq/dev_result_{}'.format(paras.save, epoch),
                             np.stack([Ydev[paras.bptt:], t2np(Ydev_pred)]))
-                    #画图可视化出来，画验证集
-                    visualize_prediction(
-                        Ytest[paras.bptt:] * Y_std + Y_mean, t2np(Ytest_pred) * Y_std + Y_mean, test_dfa_state_pred_array,
-                        os.path.join(paras.save, 'predict_seq'),
-                        seg_length=paras.visualization_len, dir_name='visualizations-test-%s' % str(best_dev_epoch))# 模型自己预测的
 
+                    #画验证集
                     visualize_prediction(
-                        Ydev[paras.bptt:] * Y_std + Y_mean, t2np(Ydev_pred) * Y_std + Y_mean, stest[paras.bptt:],#stest状态标签
+                        Ydev[paras.bptt:] * Y_std + Y_mean, t2np(Ydev_pred) * Y_std + Y_mean, stest[paras.bptt:],
+                        # stest状态标签
                         os.path.join(paras.save, 'predict_seq'),
                         seg_length=paras.visualization_len, dir_name='visualizations-dev-%s' % str(best_dev_epoch))
-
                     # make figure of best model on train, dev and test set for debugging
                     show_data(tdev, Ydev, t2np(Ydev_pred), paras.save, 'best_dev_devresults',
                               msg='dev results (dev error %.3f) at iter %d' % (error_dev, epoch))
-                    show_data(ttest, Ytest, t2np(Ytest_pred), paras.save,
-                              'best_dev_testresults',
-                              msg='test results (test error %.3f) at iter %d (=best dev)' % (error_test, epoch))
+
 
                     # save model
                     #torch.save(model.state_dict(), os.path.join(paras.save, 'best_dev_model_state_dict.pt'))
