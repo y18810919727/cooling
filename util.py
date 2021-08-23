@@ -29,6 +29,81 @@ class SimpleLogger(object):
         except:
             print('Warning: could not log to', self.f)
 
+def draw_table(file,integral,error,length,base_dir,dir_name='visualizations'):
+
+    if not os.path.exists(os.path.join(base_dir, dir_name)):
+        os.mkdir(os.path.join(base_dir, dir_name))
+    plt.figure(figsize=(20, 4))
+    # 列名
+    vals = integral
+    col = []
+    for i in range(0,len(integral[0])):
+        col.append(f'{length * i} - {length * (i + 1)}')
+    # 行名
+    row = ["truth", "prediction"]
+    # 表格里面的具体值
+    plt.subplot(2, 1, 1)
+    plt.title(file+" - "+'integral (ws)')
+    tab = plt.table(cellText=vals,
+                    colLabels=col,
+                    rowLabels=row,
+                    loc='center',
+                    cellLoc='center',
+                    rowLoc='center')
+    tab.scale(1, 2)
+    plt.axis('off')
+
+    vals = error
+    col = ["MAE","MAPE(%)"]
+    # 行名
+    row = ["mean", "std"]
+    # 表格里面的具体值
+    plt.subplot(2, 1, 2)
+    plt.title(file + " - " + 'error')
+    tab = plt.table(cellText=vals,
+                    colLabels=col,
+                    rowLabels=row,
+                    loc='center',
+                    cellLoc='center',
+                    rowLoc='center')
+    tab.scale(1, 2)
+    plt.axis('off')
+
+    plt.savefig(os.path.join(
+        base_dir, dir_name, 'compare.png'
+    ))
+    plt.close()
+
+
+def draw_table_all(file,error_all,base_dir):
+
+    if not os.path.exists(base_dir):
+        os.mkdir(base_dir)
+    plt.figure(figsize=(20, 2))
+    # 列名
+    vals = error_all
+    col = file
+    # 行名
+    row = ["mae", "mape"]
+    # 表格里面的具体值
+    plt.title('error_all')
+    tab = plt.table(cellText=vals,
+                    colLabels=col,
+                    rowLabels=row,
+                    loc='center',
+                    cellLoc='center',
+                    rowLoc='center')
+    tab.scale(1, 2)
+    plt.axis('off')
+
+    plt.savefig(os.path.join(
+        base_dir, 'compare.png'
+    ))
+    plt.close()
+
+
+
+
 
 def show_data(t, target, pred, folder, tag, msg=''):
     length = min(t.shape[0], target.shape[0], pred.shape[0])
@@ -184,7 +259,7 @@ def get_mlp_network(layer_sizes, outputs_size):
     return nn.Sequential(*modules_list)
 
 
-def visualize_prediction(Y_label, Y_pred, s_test, base_dir, seg_length=500, dir_name='visualizations'):
+def visualize_prediction(Y_label, Y_pred, s_test, pserver,base_dir, seg_length=500, dir_name='visualizations'):
     assert len(Y_pred) == len(Y_label)
     if not os.path.exists(os.path.join(base_dir, dir_name)):
         os.mkdir(os.path.join(base_dir, dir_name))
@@ -192,7 +267,7 @@ def visualize_prediction(Y_label, Y_pred, s_test, base_dir, seg_length=500, dir_
     ID = 0
     for begin in range(0, len(Y_pred), seg_length):
         ID += 1
-        plt.figure(figsize=(15, 12))
+        plt.figure(figsize=(18, 15))
         y_label_seg = Y_label[begin:min(begin + seg_length, len(Y_label))]
         y_pred_seg = Y_pred[begin:min(begin + seg_length, len(Y_pred))]
         s_test_seg = s_test[begin:min(begin + seg_length, len(Y_pred))]
@@ -200,8 +275,11 @@ def visualize_prediction(Y_label, Y_pred, s_test, base_dir, seg_length=500, dir_
         X = np.arange(begin, begin + len(y_label_seg))
         outputs_names = ['Ti', 'Pcooling', 'Power cooling']
         classes = ['unknown', 'closed', 'start-1', 'start-2', 'cooling']
+
+        y_pserver = pserver[begin:min(begin + seg_length, len(Y_label))]
+
         for i, y_name in enumerate(outputs_names):
-            plt.subplot(6, 2, i * 2 + 1)
+            plt.subplot(7, 2, i * 2 + 2)
             y_label = y_label_seg[:, i]
             y_pred = y_pred_seg[:, i]
             for state in range(max_state+1):
@@ -210,13 +288,13 @@ def visualize_prediction(Y_label, Y_pred, s_test, base_dir, seg_length=500, dir_
             plt.xlabel('indexes')
             plt.ylabel(y_name)
             plt.legend()
-            plt.subplot(6, 2, i * 2 + 2)
+            plt.subplot(7, 2, i * 2 + 1)
 
             plt.plot(X, y_label, '-k', label='Time Series')
             plt.xlabel('indexes')
             plt.ylabel(y_name)
             plt.legend()
-            plt.subplot(6, 1, i +4)
+            plt.subplot(7, 1, i +4)
             y_label = y_label_seg[:, i]
             y_pred = y_pred_seg[:, i]
             plt.plot(X, y_label, '-k', label='Time Series')
@@ -226,6 +304,14 @@ def visualize_prediction(Y_label, Y_pred, s_test, base_dir, seg_length=500, dir_
             plt.xlabel('indexes')
             plt.ylabel(y_name)
             plt.legend()
+
+        plt.subplot(7, 1, 7)
+
+        plt.plot(X, y_pserver, '-k', label='Time Series')
+        plt.xlabel('indexes')
+        plt.ylabel("Pserver")
+        plt.legend()
+
         plt.savefig(os.path.join(
             base_dir, dir_name, '%i-%i-%i.png' % (ID, begin, begin + seg_length)
         ))

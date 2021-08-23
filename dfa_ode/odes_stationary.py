@@ -25,7 +25,7 @@ class DFA_ODENets(nn.Module):
         self.linear_decoder = linear_decoder
         self.y_mean = nn.Parameter(torch.FloatTensor(y_mean), requires_grad=False)
         self.y_std = nn.Parameter(torch.FloatTensor(y_std), requires_grad=False)
-        if cell_type == 'merge':   #odecell
+        if cell_type == 'merge':   #odecell 每个ode的cell
             ODECellClass = ODEMergeCell
         # elif cell_type == 'cde':
         #     ODECellClass = CDECell

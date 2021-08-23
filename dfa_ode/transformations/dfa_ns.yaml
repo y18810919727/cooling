@@ -19,11 +19,11 @@ Ly_share: False
 # The type of odes.y:
 #   s: stationary           dy_dt = f(ht) - yt
 #   n: non-stationary       dy_dt = f(ht)
-#   d: directed prediction  yt = f(ht)
+#   d: directed prediction  yt = f(ht) 直接预测
 odes:
 - name: unknown
   cell: gru
-  y_type: ['s', 's', 's']
+  y_type: ['s', 's', 's']   #三输出
 
 - name: closed
   cell: gru

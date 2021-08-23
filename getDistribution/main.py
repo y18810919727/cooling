@@ -25,13 +25,14 @@ def xw_toExcel(data, fileName):  # xlsxwriter库储存数据到excel
     worksheet1.write_row('A5', data[5])  
     workbook.close()  # 关闭表
 
+
+
 # 按照固定区间长度绘制频率分布直方图
 # bins_interval 区间的长度
 # margin        设定的左边和右边空留的大小
 def probability_distribution(data, bins_interval=1, margin=1,no=0):
     plt.rcParams['font.sans-serif'] = ['SimHei']				# 解决中文无法显示的问题
     bins = range(min(data), max(data) + bins_interval - 1, bins_interval)
-  
     xmin=min(data)-min(data)%bins_interval
     xmax=max(data)+bins_interval-max(data)%bins_interval
 
