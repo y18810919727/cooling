@@ -93,6 +93,8 @@ class DFA_MIMO(nn.Module):
     """
     modelcall,给定初始状态，将输入扔进去，更新状态，预测
     """
+
+
     def model_call(self, model, expand_cell, inputs, state0=None, dfa_states=None, dt=None, **kwargs):
         """
         :param model: dfa_odes
@@ -109,7 +111,7 @@ class DFA_MIMO(nn.Module):
         state = state0
         outputs = []
         states = []
-        inputs = expand_cell(inputs)
+        inputs = expand_cell(inputs) #升到20维
         if dt is None:
             dt = torch.ones(*inputs.size()[:2], device=inputs.device).unsqueeze(dim=-1) / 10
 
@@ -155,8 +157,8 @@ class DFA_MIMO(nn.Module):
 
         assert history_s_tn.shape[1] == history_length
 
-        history_X_tn, predicted_X_tn = X_tn[:, :history_length], X_tn[:, history_length:]
-        history_dt_tn, predicted_dt_tn = dt_tn[:, :history_length], dt_tn[:, history_length:]
+        history_X_tn, predicted_X_tn = X_tn[:, :history_length], X_tn[:, history_length:] #过去的序列，未来的序列
+        history_dt_tn, predicted_dt_tn = dt_tn[:, :history_length], dt_tn[:, history_length:] #过去的时间间隔，未来的时间间隔
 
         # Y_pred, h_pred = model(X_tn, state0=htrain_pred[:, -1, :], dt=dt_tn)
         Y_pred, h_pred = self.forward_prediction(

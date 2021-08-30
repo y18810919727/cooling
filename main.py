@@ -9,7 +9,8 @@ parent = os.path.dirname(sys.path[0])#os.getcwd())
 sys.path.append(parent)
 from dfa_ode.model_dfa import DFA_MIMO
 from dfa_ode.train import EpochTrainer
-from util import SimpleLogger, show_data, init_weights, array_operate_with_nan, get_Dataset, visualize_prediction, t2np, draw_table,draw_table_all
+from util import SimpleLogger, show_data, init_weights, array_operate_with_nan, get_Dataset, visualize_prediction, t2np, \
+    draw_table, draw_table_all, compare_pc
 
 import pandas as pd
 
@@ -73,7 +74,7 @@ parser.add_argument("--l2", type=float, default=0., help="L2 regularization")
 parser.add_argument("--save", type=str, default='results', help="experiment logging folder")
 parser.add_argument("--eval_epochs", type=int, default=10, help="validation every so many epochs")
 parser.add_argument("--seed", type=int, default=None, help="random seed")
-
+parser.add_argument("--powertime", type=int, default=800, help="powertime")
 
 
 # ODE_DFA
@@ -160,13 +161,13 @@ datasets=['Data_train_1_7_1','Data_train_1_8k','Data_train_3_8k','Data_train_4_2
 all_sqe_nums = {}
 len_sqe = []
 if paras.debug: # Using short dataset for acceleration
-     Xtrain, Ytrain, ttrain, strain = [df.to_numpy(dtype=np.float32) for df in get_Dataset('./data/Data_train_debug.csv')]
-     Xdev, Ydev, tdev, sdev = [df.to_numpy(dtype=np.float32) for df in get_Dataset('./data/Data_validate_short_debug.csv')]
+     Xtrain, Ytrain, ttrain, strain = [df.to_numpy(dtype=np.float32) for df in get_Dataset('./mydata/Front_Data_train_1_7_1.csv')]
+     Xdev, Ydev, tdev, sdev = [df.to_numpy(dtype=np.float32) for df in get_Dataset('./mydata/Back_Data_train_1_7_1.csv')]
      len_sqe.append(0)
      len_sqe.append(int(Xtrain.size / 2))
      all_sqe_nums['train'] =len_sqe
 
-else:
+else: # Using short dataset for acceleration
     Xtrain=[]
     Ytrain=[]
     ttrain=[]
@@ -224,33 +225,7 @@ def prediction_error(truth, prediction):
     return np.mean(results)
 
 
-#算预测powercoling的预测值和真实值的每2k个点的平均值，标准差，积分
 
-def compare_pc(truth, prediction,length):
-    rounds = (int(truth.shape[0]/length))
-    integral = []
-    integral_tarr = []
-    integral_parr = []
-    mae_s = []
-    #rmse_s = []
-    mape_s = []
-    for i in range(rounds):
-        integral_t,integral_p = np.trapz(truth[i*length:(i+1)*length]) ,np.trapz(prediction[i * length:(i + 1) * length])
-
-        integral_tarr.append(integral_t)
-        integral_parr.append(integral_p)
-        mae_s.append(abs(integral_t-integral_p))
-        mape_s.append(abs((integral_t-integral_p)/integral_t)*100)
-        #rmse_s.append((integral_t - integral_p) ** 2)
-    integral.append(integral_tarr)
-    integral.append(integral_parr)
-    mae = np.mean(mae_s)
-    mape = np.mean(mape_s)
-    #rmse = np.sqrt(np.mean(mape_s))
-    mae_std = np.std(mae_s,ddof=1)
-    mape_std = np.std(mape_s,ddof=1)
-    error=[[mae,mape],[mae_std,mape_std]]
-    return integral,error
 """
 - model:
     GRU (compensated GRU to avoid linear increase of state; has standard GRU as special case for Euler scheme and equidistant data)
@@ -343,10 +318,12 @@ error_test = -1
 
 max_epochs_no_decrease = 30  # If error in dev does not decrease in long time, the training will be paused early.
 
+#Y_mean1 ,Y_std1,X_mean1,X_std1= Y_mean,Y_std,X_mean,X_std
+
 try:  # catch error and redirect to logger
 
     for epoch in range(1, paras.epochs + 1):
-
+        #Y_mean, Y_std, X_mean, X_std = Y_mean1 ,Y_std1,X_mean1,X_std1
         mse_train = trainer(epoch) #训练
         if epoch % paras.eval_epochs == 0:
             with torch.no_grad(): #验证  停止梯度计算
@@ -403,7 +380,7 @@ try:  # catch error and redirect to logger
                         os.path.join(paras.save, 'predict_seq'),
                         seg_length=paras.visualization_len, dir_name='visualizations-train-%s/%s' % (str(best_dev_epoch), everdata))
                     # integral, error = compare_pc(Ytrain[paras.bptt:, 2] * Y_std[2] + Y_mean[2],
-                    #                              t2np(Ytrain_pred)[:, 2] * Y_std[2] + Y_std[2], 1800)
+                    #                              t2np(Ytrain_pred)[:, 2] * Y_std[2] + Y_std[2],dttrain, 1800)
                     #
                     # if (int(len(integral)) != 0):
                     #     draw_table(everdata, integral, error, 1800, os.path.join(paras.save, 'predict_seq'),
@@ -462,11 +439,15 @@ try:  # catch error and redirect to logger
                     logging('new best dev error %.3f' % best_dev_error)
                     error_all_mae = []
                     error_all_mape = []
+                    test_rres = []
+
+
                     for everdata in datasets:
                         Xtest, Ytest, ttest, stest = [df.to_numpy(dtype=np.float32) for df in
                                                   get_Dataset('./mydata/Back_'+everdata+'.csv')]
                         dttest = np.append(ttest[1:] - ttest[:-1], ttest[1] - ttest[0]).reshape(-1, 1)
-
+                        # Y_mean, Y_std = array_operate_with_nan(Ytest, np.mean), array_operate_with_nan(Ytest, np.std)  # 归一化
+                        # X_mean, X_std = array_operate_with_nan(Xtest, np.mean), array_operate_with_nan(Xtest, np.std)
 
                         Ytest = (Ytest - Y_mean) / Y_std
                         Xtest = (Xtest - X_mean) / X_std
@@ -491,7 +472,7 @@ try:  # catch error and redirect to logger
                         test_dfa_state_pred_array = model.select_dfa_states(test_state_pred[0]).int().detach().cpu().numpy()
 
                         log_value('test/corresp_error', error_test, epoch)
-
+                        test_rres.append(error_test)
 
                         predict_path = os.path.join(paras.save, 'predict_seq/visualizations-test-{}'.format(epoch))
                         if not os.path.exists(predict_path):
@@ -507,10 +488,10 @@ try:  # catch error and redirect to logger
                             seg_length=paras.visualization_len, dir_name='visualizations-test-%s/%s' % (str(best_dev_epoch) , everdata))# 模型自己预测的
 
                         integral,error = compare_pc(Ytest[paras.bptt:, 2] * Y_std[2] + Y_mean[2],
-                                          t2np(Ytest_pred)[:, 2] * Y_std[2] + Y_std[2], 1800)
+                                          t2np(Ytest_pred)[:, 2] * Y_std[2] + Y_std[2],dttest,paras.powertime)
 
-                        if (int(len(integral)) != 0):
-                            draw_table(everdata, integral, error, 1800,  os.path.join(paras.save, 'predict_seq'), dir_name='visualizations-test-%s/%s' % (str(best_dev_epoch) , everdata))
+                        if (int(len(integral[0])) != 0):
+                            draw_table(everdata, integral, error, paras.powertime,  os.path.join(paras.save, 'predict_seq'), dir_name='visualizations-test-%s/%s' % (str(best_dev_epoch) , everdata))
                         error_all_mae.append(str(error[0][0])+" ± "+str(error[1][0]))
                         error_all_mape.append(str(error[0][1])+" ± "+str(error[1][1]))
                         show_data(ttest, Ytest, t2np(Ytest_pred), paras.save+'/predict_seq/visualizations-test-%s'  % (str(best_dev_epoch)),
@@ -525,12 +506,13 @@ try:  # catch error and redirect to logger
                         if not os.path.exists(predict_result):
                             os.mkdir(predict_result)
 
-                        pickle.dump({'t_test': ttest, 'y_target_test': Ytest, 'y_pred_test': t2np(Ytest_pred),'x_test':Xtest,'test_dfa_state_pred_array':test_dfa_state_pred_array,'Y_mean':Y_mean,'Y_std':Y_std},
+                        pickle.dump({'t_test': ttest, 'y_target_test': Ytest, 'y_pred_test': t2np(Ytest_pred),'x_test':Xtest,'test_dfa_state_pred_array':test_dfa_state_pred_array,
+                                     'Y_mean':Y_mean,'Y_std':Y_std,'X_mean':X_mean,'X_std':X_std},
                                     open(os.path.join(predict_result, 'datafigs_{}.pkl'.format(everdata)), 'wb'))
 
                     error_all=[error_all_mae,error_all_mape]
-                    draw_table_all(datasets, error_all, os.path.join(paras.save, 'predict_seq'))
-
+                    draw_table_all(datasets, error_all,[ test_rres] , os.path.join(paras.save, 'predict_seq'))
+                    #draw_table_all(datasets,test_rres,os.path.join(paras.save, 'predict_seq'))
                 elif epoch - best_dev_epoch > max_epochs_no_decrease:
                     logging('Development error did not decrease over %d epochs -- quitting.'%max_epochs_no_decrease)
                     break

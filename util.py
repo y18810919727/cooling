@@ -75,18 +75,33 @@ def draw_table(file,integral,error,length,base_dir,dir_name='visualizations'):
     plt.close()
 
 
-def draw_table_all(file,error_all,base_dir):
+def draw_table_all(file,error_all,test_rres,base_dir):
 
     if not os.path.exists(base_dir):
         os.mkdir(base_dir)
-    plt.figure(figsize=(20, 2))
+    plt.figure(figsize=(20, 4))
     # 列名
     vals = error_all
     col = file
     # 行名
     row = ["mae", "mape"]
     # 表格里面的具体值
+    plt.subplot(2, 1, 1)
     plt.title('error_all')
+    tab = plt.table(cellText=vals,
+                    colLabels=col,
+                    rowLabels=row,
+                    loc='center',
+                    cellLoc='center',
+                    rowLoc='center')
+    tab.scale(1, 2)
+    plt.axis('off')
+
+    row = ["rres"]
+    vals = test_rres
+
+    plt.subplot(2, 1, 2)
+    plt.title('rrse')
     tab = plt.table(cellText=vals,
                     colLabels=col,
                     rowLabels=row,
@@ -101,7 +116,34 @@ def draw_table_all(file,error_all,base_dir):
     ))
     plt.close()
 
+#算预测powercoling的预测值和真实值的每2k个点的平均值，标准差，积分
 
+def compare_pc(truth, prediction,dttrain,length):
+    rounds = (int(truth.shape[0]/length))
+    integral = []
+    integral_tarr = []
+    integral_parr = []
+    mae_s = []
+    #rmse_s = []
+    mape_s = []
+    for i in range(rounds):
+        integral_t = (truth[i*length:(i+1)*length] * dttrain.reshape(-1)[i*length:(i+1)*length]*10).sum()
+        integral_p = (prediction[i*length:(i+1)*length] * dttrain.reshape(-1)[i*length:(i+1)*length]*10).sum()
+
+        integral_tarr.append(integral_t)
+        integral_parr.append(integral_p)
+        mae_s.append(abs(integral_t-integral_p))
+        mape_s.append(abs((integral_t-integral_p)/integral_t)*100)
+        #rmse_s.append((integral_t - integral_p) ** 2)
+    integral.append(integral_tarr)
+    integral.append(integral_parr)
+    mae = np.mean(mae_s)
+    mape = np.mean(mape_s)
+    #rmse = np.sqrt(np.mean(mape_s))
+    mae_std = np.std(mae_s,ddof=1)
+    mape_std = np.std(mape_s,ddof=1)
+    error=[[mae,mape],[mae_std,mape_std]]
+    return integral,error
 
 
 

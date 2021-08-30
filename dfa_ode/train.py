@@ -116,7 +116,7 @@ class EpochTrainer(object):
             # iterations within current epoch 每个epoch先初始化一个变量
             epoch_loss_classification = 0.
             epoch_loss_pred = 0.
-
+            epoch_loss_power = 0.
 
 
             # Generating Time Recoder
@@ -164,6 +164,7 @@ class EpochTrainer(object):
                 s = self.states_train[iter_inds_next]
 
                 # training
+
                 self.model.train()
                 self.model.zero_grad()
 
@@ -173,10 +174,21 @@ class EpochTrainer(object):
                 with tr('forward'):
                     Y_pred, states_pred = self.model.forward_prediction(X, state0=state0, dfa_states=s, dt=dt)
 
+
+                # Y_pred_power = ((Y_pred[:, :, 2]*dt.reshape(-1,800)).sum(axis=1))
+                # Y_target_power = ((Y_target[:, :, 2]*dt.reshape(-1,800)).sum(axis=1))
+
                 loss_pred = self.model.criterion(
-                    torch.cat([pre_outputs, Y_pred], dim=-1),
-                    torch.cat([pre_Y_target, Y_target], dim=-1)
+                    torch.cat([pre_outputs, Y_pred], dim=1),#
+                    torch.cat([pre_Y_target, Y_target], dim=1)
                 )
+                #
+                # loss_power = self.model.criterion(
+                #     Y_pred_power,#只考虑预测
+                #     Y_target_power
+                # )
+
+
 
                 # The model determines the dfa states at time t by itself based on h(t-1), state(t-1), x(t).
                 states_last_step = torch.cat([state0.unsqueeze(dim=1), states_pred[:,:-1, :]], dim=1)
@@ -226,10 +238,11 @@ class EpochTrainer(object):
                         all_dfa_states_prob.reshape(-1, all_dfa_states_prob.shape[-1]).contiguous(),
                         states_label.reshape(-1).contiguous(),
                     )
+
                 dfa_states_classifications_pred_all.append(all_dfa_states_tag.reshape(-1).detach().cpu())
                 dfa_states_classifications_label_all.append(states_label.reshape(-1).detach().cpu())
 
-                loss = loss_classification + loss_pred
+                loss = loss_classification + loss_pred #+ loss_power
 
                 with tr('backward'):
                     loss.backward() #反向传播
@@ -240,10 +253,11 @@ class EpochTrainer(object):
                 epoch_loss += loss.item() * bs #梯度下降
                 epoch_loss_classification += loss_classification.item() * bs
                 epoch_loss_pred += loss_pred.item() * bs
+               # epoch_loss_power += loss_power.item() *bs
 
-                self.logging('Epoch {}, iters {}-{}, train_size {} ,train_dataSet {},loss {:.4f}, loss_pred {:.4f}, loss_class {:.4f}, time {}'.format(
+                self.logging('Epoch {}, iters {}-{}, train_size {} ,train_dataSet {},loss {:.4f}, loss_pred {:.4f}, loss_class {:.4f}, loss_power {:.4f} ,time {}'.format(
                     epoch, i+1, int(np.ceil((len(ever_train_inds)-1) / self.batch_size)), bs ,key, float(loss.item()),
-                    float(loss_pred.item()), float(loss_classification.item()), tr
+                    float(loss_pred.item()), float(loss_classification.item()),float(0), tr
                 ))
 
                 # for i in range(int(np.ceil((len(self.train_inds)-1) / self.batch_size))):
