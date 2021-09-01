@@ -6,7 +6,7 @@ import argparse
 import numpy as np
 
 
-from util import SimpleLogger, show_data, init_weights, array_operate_with_nan, get_Dataset, visualize_prediction, t2np, draw_table,draw_table_all,compare_pc
+from util import SimpleLogger, show_data, init_weights, array_operate_with_nan, get_Dataset, visualize_prediction, t2np, draw_table,draw_table_all,calculation_ms
 parser = argparse.ArgumentParser(description='Models for Continuous Stirred Tank dataset')
 parser.add_argument("--save", type=str, default='test', help="experiment logging folder")
 parser.add_argument("--bptt", type=int, default=800, help="bptt")
@@ -37,8 +37,6 @@ if __name__ == '__main__':
     result_path = os.path.join(paras.save, 'predict_test')
     if not os.path.exists(result_path):
         os.mkdir(result_path)
-
-    datasets=['Data_train_1_7_1','Data_train_1_8k','Data_train_3_8k','Data_train_4_2k','Data_validate']
     file = open("../results/tmp1/1.pkl", "rb")
     data = pickle.load(file)
     X_mean = data['X_mean']
@@ -66,7 +64,7 @@ if __name__ == '__main__':
                                     result_path,
                                     seg_length=2000, dir_name='%s' %(everdata))# 模型自己预测的
 
-        integral, error = compare_pc(Ytest[paras.bptt:, 2] * Y_std[2] + Y_mean[2],
+        integral, error = calculation_ms(Ytest[paras.bptt:, 2] * Y_std[2] + Y_mean[2],
                                      y_pred_test[:, 2] * Y_std[2] + Y_std[2], dttest, paras.powertime)
         if (int(len(integral[0])) != 0):
             draw_table(everdata, integral, error,  paras.powertime, result_path,dir_name='%s' %(everdata))

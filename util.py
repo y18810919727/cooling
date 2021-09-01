@@ -116,9 +116,9 @@ def draw_table_all(file,error_all,test_rres,base_dir):
     ))
     plt.close()
 
-#算预测powercoling的预测值和真实值的每2k个点的平均值，标准差，积分
+#算预测powercoling的预测值和真实值的每length个点的平均值，标准差，积分
 
-def compare_pc(truth, prediction,dttrain,length):
+def calculation_ms(truth, prediction,dttrain,length):
     rounds = (int(truth.shape[0]/length))
     integral = []
     integral_tarr = []
@@ -147,7 +147,7 @@ def compare_pc(truth, prediction,dttrain,length):
 
 
 
-def show_data(t, target, pred, folder, tag, msg=''):
+def show_data(t, target, pred, folder, tag ,everdata,msg=''):
     length = min(t.shape[0], target.shape[0], pred.shape[0])
     t, target, pred = [x[-length:] for x in [t, target, pred]]
 
@@ -171,7 +171,7 @@ def show_data(t, target, pred, folder, tag, msg=''):
     #for i, ax in enumerate(axs):
     #    ax.plot(target[:, i], 'g--', pred[:, i], 'r-')
 
-    plt.savefig("%s/%s.png"%(folder, tag))
+    plt.savefig("%s/%s-%spng"%(folder, tag,everdata))
     plt.close('all')
 
 

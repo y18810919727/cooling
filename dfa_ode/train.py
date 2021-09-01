@@ -93,7 +93,7 @@ class EpochTrainer(object):
             self.all_states = all_states.data
 
         # all_states_posterior = self.model.rnn_encoder(self.Ytrain1)
-#字典随机排序
+#字典随机排序，，使其能够随机训练某个训练集
     def random_dic(self,dicts):
         dict_key_ls = list(dicts.keys())
         random.shuffle(dict_key_ls)
@@ -107,7 +107,7 @@ class EpochTrainer(object):
         sqe_head = 0;
         cum_bs = 0
         epoch_loss = 0.
-        self.all_sqe_nums = self.random_dic(self.all_sqe_nums)
+        self.all_sqe_nums = self.random_dic(self.all_sqe_nums)  #字典随机排序，，使其能够随机训练某个训练集
         for key in self.all_sqe_nums:
 
             ever_train_inds = self.train_inds[self.all_sqe_nums[key][0] : self.all_sqe_nums[key][1]]
@@ -191,6 +191,7 @@ class EpochTrainer(object):
 
 
                 # The model determines the dfa states at time t by itself based on h(t-1), state(t-1), x(t).
+                #时间预测状态
                 states_last_step = torch.cat([state0.unsqueeze(dim=1), states_pred[:,:-1, :]], dim=1)
                 yt_ht_for_state_transform = states_last_step[..., :-2]
                 cum_t_for_state_transform = states_last_step[..., -2:-1] + dt
