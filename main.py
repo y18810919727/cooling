@@ -89,8 +89,8 @@ parser.add_argument("--reset", action="store_true", help="reset even if same exp
 parser.add_argument("--short_encoding", action="store_true", help="Encoding short sequences to generate state0")
 parser.add_argument("--debug", action="store_true", help="debug mode, for acceleration")
 
-#数据集
-parser.add_argument("--datasets", type=list, default=['Data_train_1_7_1','Data_train_1_8k','Data_train_3_8k','Data_train_4_2k','Data_validate'], help="validation every so many epochs")
+#数据集['Data_train_1_7_1','Data_train_1_8k','Data_train_3_8k','Data_train_4_2k','Data_validate']
+parser.add_argument("--datasets", type=list, default=['Data_train_1_7_1'], help="validation every so many epochs")
 
 paras = parser.parse_args()
 
@@ -493,7 +493,7 @@ try:  # catch error and redirect to logger
                             seg_length=paras.visualization_len, dir_name='visualizations-test-%s/%s' % (str(best_dev_epoch) , everdata))# 模型自己预测的
 
                         integral,error = calculation_ms(Ytest[paras.bptt:, 2] * Y_std[2] + Y_mean[2],
-                                          t2np(Ytest_pred)[:, 2] * Y_std[2] + Y_std[2],dttest,paras.powertime)
+                                          t2np(Ytest_pred)[:, 2] * Y_std[2] + Y_mean[2],dttest,paras.powertime)
 
                         if (int(len(integral[0])) != 0):
                             draw_table(everdata, integral, error, paras.powertime,  os.path.join(paras.save, 'predict_seq'), dir_name='visualizations-test-%s/%s' % (str(best_dev_epoch) , everdata))

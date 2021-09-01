@@ -2,5 +2,5 @@
 
 cd ..
 
-CUDA_VISIBLE_DEVICES=2 python main.py --save 0831_train --model DFA --dfa_yaml dfa_ns
+CUDA_VISIBLE_DEVICES=5 python main.py --save 0901_ns_1.7k --model DFA --dfa_yaml dfa_ns
 

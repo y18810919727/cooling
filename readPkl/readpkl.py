@@ -10,7 +10,7 @@ from util import SimpleLogger, show_data, init_weights, array_operate_with_nan, 
 parser = argparse.ArgumentParser(description='Models for Continuous Stirred Tank dataset')
 parser.add_argument("--save", type=str, default='test', help="experiment logging folder")
 parser.add_argument("--bptt", type=int, default=800, help="bptt")
-parser.add_argument("--powertime", type=int, default=7200, help="powertime")
+parser.add_argument("--powertime", type=int, default=1800, help="powertime")
 
 def prediction_error(truth, prediction):
     length = min(truth.shape[0], prediction.shape[0])
@@ -65,7 +65,7 @@ if __name__ == '__main__':
                                     seg_length=2000, dir_name='%s' %(everdata))# 模型自己预测的
 
         integral, error = calculation_ms(Ytest[paras.bptt:, 2] * Y_std[2] + Y_mean[2],
-                                     y_pred_test[:, 2] * Y_std[2] + Y_std[2], dttest, paras.powertime)
+                                     y_pred_test[:, 2] * Y_std[2] + Y_mean[2], dttest, paras.powertime)
         if (int(len(integral[0])) != 0):
             draw_table(everdata, integral, error,  paras.powertime, result_path,dir_name='%s' %(everdata))
         error_all_mae.append(str(error[0][0]) + " ± " + str(error[1][0]))
