@@ -168,7 +168,7 @@ class EpochTrainer(object):
                 self.model.train()
                 self.model.zero_grad()
 
-                pre_outputs, pre_states = self.model.forward_posterior(torch.cat([pre_X, pre_Y_target], dim=-1), dfa_states=pre_s, dt=pre_dt)
+                pre_outputs, pre_states = self.model.forward_posterior(pre_X,torch.cat([pre_X, pre_Y_target], dim=-1),dfa_states=pre_s, dt=pre_dt)
                 state0 = pre_states[:, -1]    #得到初始状态
 
                 with tr('forward'):
@@ -196,6 +196,7 @@ class EpochTrainer(object):
                 yt_ht_for_state_transform = states_last_step[..., :-2]
                 cum_t_for_state_transform = states_last_step[..., -2:-1] + dt
                 s_for_state_transform = states_last_step[..., -1:]
+
 
                 all_dfa_states_tag, all_dfa_states_prob, extra_info = self.model.states_classification(
                     torch.cat([
@@ -243,7 +244,7 @@ class EpochTrainer(object):
                 dfa_states_classifications_pred_all.append(all_dfa_states_tag.reshape(-1).detach().cpu())
                 dfa_states_classifications_label_all.append(states_label.reshape(-1).detach().cpu())
 
-                loss = loss_classification + loss_pred #+ loss_power
+                loss = loss_classification + loss_pred
 
                 with tr('backward'):
                     loss.backward() #反向传播
@@ -256,9 +257,9 @@ class EpochTrainer(object):
                 epoch_loss_pred += loss_pred.item() * bs
                # epoch_loss_power += loss_power.item() *bs
 
-                self.logging('Epoch {}, iters {}-{}, train_size {} ,train_dataSet {},loss {:.4f}, loss_pred {:.4f}, loss_class {:.4f}, loss_power {:.4f} ,time {}'.format(
+                self.logging('Epoch {}, iters {}-{}, train_size {} ,train_dataSet {},loss {:.4f}, loss_pred {:.4f}, loss_class {:.4f},time {}'.format(
                     epoch, i+1, int(np.ceil((len(ever_train_inds)-1) / self.batch_size)), bs ,key, float(loss.item()),
-                    float(loss_pred.item()), float(loss_classification.item()),float(0), tr
+                    float(loss_pred.item()), float(loss_classification.item()), tr
                 ))
 
                 # for i in range(int(np.ceil((len(self.train_inds)-1) / self.batch_size))):

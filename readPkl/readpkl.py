@@ -31,7 +31,7 @@ if __name__ == '__main__':
 
     paras = parser.parse_args()
     paras.save = os.path.join('../results', paras.save)  # 路径拼接，改变paras.save为'results/tmp'
-    datasets=['Data_train_1_7_1','Data_train_1_8k','Data_train_3_8k','Data_train_4_2k','Data_validate']
+    datasets=['train']
     all_sqe_nums = {}
     len_sqe = []
     result_path = os.path.join(paras.save, 'predict_test')
@@ -72,6 +72,7 @@ if __name__ == '__main__':
         error_all_mape.append(str(error[0][1]) + " ± " + str(error[1][1]))
         error_test = prediction_error(Ytest[paras.bptt:], y_pred_test)
         test_rres.append(error_test.tolist())
+
         #print(data)
         file.close()
 

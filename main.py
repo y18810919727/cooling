@@ -2,6 +2,7 @@ import os
 import sys
 import numpy as np
 from time import time
+from datetime import timezone, timedelta,datetime
 import torch
 GPU = torch.cuda.is_available()
 
@@ -90,7 +91,8 @@ parser.add_argument("--short_encoding", action="store_true", help="Encoding shor
 parser.add_argument("--debug", action="store_true", help="debug mode, for acceleration")
 
 #数据集['Data_train_1_7_1','Data_train_1_8k','Data_train_3_8k','Data_train_4_2k','Data_validate']
-parser.add_argument("--datasets", type=list, default=['Data_train_1_7_1'], help="validation every so many epochs")
+parser.add_argument("--datasets", type=list, default=['Data_train_1_7_1'], help="datasets")
+parser.add_argument("--describe", type=str, default="重新改了一下网络，看一下在1.7k数据集上的效果", help="describe")
 
 paras = parser.parse_args()
 
@@ -129,6 +131,11 @@ logging('Args: {}'.format(paras))
 
 
 
+beijing = timezone(timedelta(hours=8))
+time_beijing = datetime.utcnow().astimezone(beijing)
+aim = paras.describe
+describe = "实验时间:{}\n实验目的:{}\n".format(time_beijing,aim)
+logging('\n实验描述', '\n{}'.format(describe))
 
 """
 fixed input parameters
@@ -312,7 +319,7 @@ best_dev_error = 1.e5
 best_dev_epoch = 1
 error_test = -1
 
-max_epochs_no_decrease = 30  # If error in dev does not decrease in long time, the training will be paused early.
+max_epochs_no_decrease = 500  # If error in dev does not decrease in long time, the training will be paused early.
 
 
 try:  # catch error and redirect to logger
@@ -363,14 +370,14 @@ try:  # catch error and redirect to logger
 
                     if not os.path.exists('{}/predict_seq'.format(paras.save)):
                         os.mkdir('{}/predict_seq'.format(paras.save))
-                    train_path = os.path.join(paras.save, 'predict_seq/visualizations-train-{}'.format(best_dev_epoch))
+                    train_path = os.path.join(paras.save, 'predict_seq/visualizations-train-{}'.format(epoch))
                     if not os.path.exists(train_path):
                         os.mkdir(train_path)
 
                     visualize_prediction(
                         Ytrain[paras.bptt:] * Y_std + Y_mean, t2np(Ytrain_pred) * Y_std + Y_mean, strain[paras.bptt:],Xtrain[paras.bptt:,0]* X_std[0] + X_mean[0],
                         os.path.join(paras.save, 'predict_seq'),
-                        seg_length=paras.visualization_len, dir_name='visualizations-train-%s/%s' % (str(best_dev_epoch), everdata))
+                        seg_length=paras.visualization_len, dir_name='visualizations-train-%s/%s' % (str(epoch), everdata))
                     # integral, error = calculation_ms(Ytrain[paras.bptt:, 2] * Y_std[2] + Y_mean[2],
                     #                              t2np(Ytrain_pred)[:, 2] * Y_std[2] + Y_std[2],dttrain, 1800)
                     #
@@ -432,15 +439,16 @@ try:  # catch error and redirect to logger
                     show_data(tdev, Ydev, t2np(Ydev_pred), best_dev_devresults_path, 'best_dev_devresults',everdata,
                               msg='dev results (dev error %.3f) at iter %d-%s' % (error_dev, epoch,everdata))
 
+                    logging(' dev error sum %.3f' % error_dev_sum)
                 #验证集上，如果误差比最好的要小
                 #验证集上达到一个最好的效果，拿测试集做预测，看效果
                 # update best dev model
-                if error_dev_sum < best_dev_error:
-                    best_dev_error = error_dev_sum
-                    best_dev_epoch = epoch
-                    log_value('dev/best_error', best_dev_error, epoch)
-
-                    logging('new best dev error %.3f' % best_dev_error)
+                if error_dev_sum < best_dev_error or (epoch % 30 == 0):
+                    if(error_dev_sum < best_dev_error):
+                        best_dev_error = error_dev_sum
+                        best_dev_epoch = epoch
+                        log_value('dev/best_error', best_dev_error, epoch)
+                        logging('new best dev error sum %.3f' % best_dev_error)
                     error_all_mae = []
                     error_all_mape = []
                     test_rres = []
@@ -490,16 +498,16 @@ try:  # catch error and redirect to logger
                         visualize_prediction(
                             Ytest[paras.bptt:] * Y_std + Y_mean, t2np(Ytest_pred) * Y_std + Y_mean, test_dfa_state_pred_array,Xtest[paras.bptt:,0]* X_std[0] + X_mean[0],
                             os.path.join(paras.save, 'predict_seq'),
-                            seg_length=paras.visualization_len, dir_name='visualizations-test-%s/%s' % (str(best_dev_epoch) , everdata))# 模型自己预测的
+                            seg_length=paras.visualization_len, dir_name='visualizations-test-%s/%s' % (str(epoch) , everdata))# 模型自己预测的
 
                         integral,error = calculation_ms(Ytest[paras.bptt:, 2] * Y_std[2] + Y_mean[2],
                                           t2np(Ytest_pred)[:, 2] * Y_std[2] + Y_mean[2],dttest,paras.powertime)
 
                         if (int(len(integral[0])) != 0):
-                            draw_table(everdata, integral, error, paras.powertime,  os.path.join(paras.save, 'predict_seq'), dir_name='visualizations-test-%s/%s' % (str(best_dev_epoch) , everdata))
+                            draw_table(everdata, integral, error, paras.powertime,  os.path.join(paras.save, 'predict_seq'), dir_name='visualizations-test-%s/%s' % (str(epoch) , everdata))
                         error_all_mae.append(str(error[0][0])+" ± "+str(error[1][0]))
                         error_all_mape.append(str(error[0][1])+" ± "+str(error[1][1]))
-                        show_data(ttest, Ytest, t2np(Ytest_pred), paras.save+'/predict_seq/visualizations-test-%s'  % (str(best_dev_epoch)),
+                        show_data(ttest, Ytest, t2np(Ytest_pred), paras.save+'/predict_seq/visualizations-test-%s'  % (str(epoch)),
                                   'best_dev_testresults', everdata,
                                   msg='test results (test error %.3f) at iter %d (=best dev) -%s' % (error_test, epoch,everdata))
 
@@ -507,10 +515,12 @@ try:  # catch error and redirect to logger
                         #torch.save(model.state_dict(), os.path.join(paras.save, 'best_dev_model_state_dict.pt'))
                         torch.save(model, os.path.join(paras.save, 'best_dev_model.pt'))  #存最好的模型
 
-                        predict_result = os.path.join(paras.save, 'predict_result/')
+                        predict_result = os.path.join(paras.save, 'predict_result' )
                         if not os.path.exists(predict_result):
                             os.mkdir(predict_result)
-
+                        predict_result = os.path.join(predict_result, 'epoch%s' % (str(epoch)))
+                        if not os.path.exists(predict_result):
+                            os.mkdir(predict_result)
                         pickle.dump({'t_test': ttest, 'y_target_test': Ytest, 'y_pred_test': t2np(Ytest_pred),'x_test':Xtest,'test_dfa_state_pred_array':test_dfa_state_pred_array,
                                      'Y_mean':Y_mean,'Y_std':Y_std,'X_mean':X_mean,'X_std':X_std},
                                     open(os.path.join(predict_result, 'datafigs_{}.pkl'.format(everdata)), 'wb'))

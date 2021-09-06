@@ -51,12 +51,12 @@ class DFA_MIMO(nn.Module):
         self.expand_input_out = nn.Sequential(nn.Linear(k_in + k_out, k_state), nn.Tanh())
 
         # self.state0 = nn.Parameter(torch.zeros(k_state,), requires_grad=True)  # trainable initial state
-        self.dfa_odes_forward = DFA_ODENets(ode_nums, layers, k_state, k_out, k_state, y_mean, y_std,#前项预测，输入输入量做预测
+        self.dfa_odes_forward = DFA_ODENets(ode_nums, layers, k_in, k_out, k_state, y_mean, y_std,#前项预测，输入输入量做预测
                                                   odes_para=odes_para, ode_2order=ode_2order,
                                                   state_transformation_predictor=state_transformation_predictor,
                                                   transformations_rules=transformations, cell_type=cell_type,
                                                   Ly_share=Ly_share)
-        self.dfa_odes_posterior = DFA_ODENets(ode_nums, layers, k_state, k_out, k_state, y_mean, y_std,#后验编码，输入输出量做编码
+        self.dfa_odes_posterior = DFA_ODENets(ode_nums, layers, k_in, k_out, k_state, y_mean, y_std,#后验编码，输入输出量做编码
                                                    odes_para=odes_para, ode_2order=ode_2order,
                                                     cell_type=cell_type,
                                                     Ly_share=Ly_share)
@@ -71,7 +71,8 @@ class DFA_MIMO(nn.Module):
             states = states.reshape(-1, states.shape[-1]).contiguous()
             inputs = inputs.reshape(-1, inputs.shape[-1]).contiguous()
 
-        new_s, new_s_prob, extra_info = self.dfa_odes_forward.state_transform(states, self.expand_input(inputs))
+        xt = torch.cat([inputs, self.expand_input(inputs)], dim=-1)
+        new_s, new_s_prob, extra_info = self.dfa_odes_forward.state_transform(states, xt)
         if reshape:
             new_s_prob = new_s_prob.reshape(bs, l, -1)
             new_s = new_s.reshape(bs, l, -1)
@@ -81,21 +82,21 @@ class DFA_MIMO(nn.Module):
 
         return new_s, new_s_prob, extra_info
 
-    def forward_posterior(self, inputs, state0=None, dfa_states=None, dt=None, **kwargs):  # potential kwargs: dt
+    def forward_posterior(self, in_x ,inputs, state0=None, dfa_states=None, dt=None, **kwargs):  # potential kwargs: dt
         return self.model_call(
-            self.dfa_odes_posterior, self.expand_input_out, inputs, state0=state0, dfa_states=dfa_states, dt=dt, **kwargs
+            self.dfa_odes_posterior, self.expand_input_out,in_x, inputs, state0=state0, dfa_states=dfa_states, dt=dt, **kwargs
         )
 
-    def forward_prediction(self, inputs, state0=None, dfa_states=None, dt=None, **kwargs):  # potential kwargs: dt #预测
+    def forward_prediction(self,inputs, state0=None, dfa_states=None, dt=None, **kwargs):  # potential kwargs: dt #预测
         return self.model_call(
-            self.dfa_odes_forward, self.expand_input, inputs, state0=state0, dfa_states=dfa_states, dt=dt, **kwargs
+            self.dfa_odes_forward, self.expand_input,inputs,inputs, state0=state0, dfa_states=dfa_states, dt=dt, **kwargs
         )
     """
     modelcall,给定初始状态，将输入扔进去，更新状态，预测
     """
 
 
-    def model_call(self, model, expand_cell, inputs, state0=None, dfa_states=None, dt=None, **kwargs):
+    def model_call(self, model, expand_cell, in_x,inputs , state0=None, dfa_states=None, dt=None, **kwargs):
         """
         :param model: dfa_odes
         :param expand_cell: The model expanding inputs with size(..., k_in) to high-level feature (..., k_state)
@@ -111,7 +112,10 @@ class DFA_MIMO(nn.Module):
         state = state0
         outputs = []
         states = []
-        inputs = expand_cell(inputs) #升到20维
+
+        inputs = expand_cell(inputs) #升到20维  //第一层
+        inputs = torch.cat([in_x, inputs], dim=-1)
+
         if dt is None:
             dt = torch.ones(*inputs.size()[:2], device=inputs.device).unsqueeze(dim=-1) / 10
 
@@ -139,7 +143,8 @@ class DFA_MIMO(nn.Module):
         :param last:
         :return:
         """
-        outputs, states = self.forward_posterior(torch.cat([inputs, outputs], dim=-1), dfa_states=dfa_states, dt=dt)
+        #这里的inputs为x
+        outputs, states = self.forward_posterior(inputs,torch.cat([inputs, outputs], dim=-1), dfa_states=dfa_states, dt=dt)
 
         return states[:, -1] if last else states
 

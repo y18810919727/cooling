@@ -32,9 +32,9 @@ class DFA_ODENets(nn.Module):
         else:
             raise NotImplementedError('Cell %s is not implemented' % cell_type)
 
-        Ly = self.make_decoder(k_state, k_out) if Ly_share else None
+        Ly = self.make_decoder(k_state,k_in , k_out) if Ly_share else None
         self.odes = nn.ModuleList([ODECellClass(
-            k_in, k_out, k_state, layers, Ly=(Ly if Ly_share else self.make_decoder(k_state, k_out)),
+            k_in, k_out, k_state, layers, Ly=(Ly if Ly_share else self.make_decoder(k_state,k_in, k_out)),
             ode_2order=ode_2order, name=para['name'], y_type=para['y_type'], cell=para['cell']
         ) for para in odes_para])
         self.transforms = defaultdict(list)
@@ -43,7 +43,7 @@ class DFA_ODENets(nn.Module):
             for kind, state in state_transformation_predictor:
                 if kind == 'predict':
                     self.state_transformation_predictor[str(state)] = Predictor(
-                        self.k_state + self.k_state, self.k_state
+                        self.k_in+self.k_in+self.k_state + self.k_state, self.k_state+self.k_in
                     )
                 elif kind == 'classify':
                     self.state_transformation_predictor[str(state)] = Classification(
@@ -55,18 +55,18 @@ class DFA_ODENets(nn.Module):
             for t in transformations_rules:   #遍历所有转移规则
                 self.add_transform(t['from'], t['to'], t['rules'])
 
-    def make_decoder(self, k_state, k_out):
+    def make_decoder(self, k_state,k_in, k_out):
         if self.linear_decoder:
             Ly = nn.Linear(k_state, k_out)
         else:
             Ly = nn.Sequential(
-                nn.Linear(k_state, k_state * 2),
+                nn.Linear(k_state+k_in, (k_state+k_in) * 2),
                 nn.Tanh(),
-                nn.Linear(2 * k_state, k_out)
+                nn.Linear((k_state+k_in) * 2, k_out)
             )
         return Ly
 
-    def add_transform(self, s1, s2, rules):   # 读文件，加规则
+    def add_transform(self, s1, s2, rules):   # 读文件，加转移规则
         """
         Generating a transformation in DFA
         :param s1:
@@ -184,12 +184,12 @@ class DFA_ODENets(nn.Module):
     def combinational_ode(self, s, ht, xt, dt): #对于不同的状态，找对应的ode
         nht = torch.zeros_like(ht)
         for i in range(self.ode_nums):
-            indices = (s.squeeze(dim=-1) == i)
+            indices = (s.squeeze(dim=-1) == i) #判断是哪个状态
             if torch.any(indices):
                 nht[indices] = self.odes[i](ht[indices], xt[indices], dt[indices])
         return nht
 
-    def forward(self, state, xt, dt, new_s=None):  #给xt,dt预测新的输出或者state
+    def forward(self, state, xt, dt,new_s=None):  #给xt,dt预测新的输出或者state
         """
 
         :param state: The concatenation of ht, cum_t, cur_s : (bs, k_state + 2)
@@ -199,9 +199,9 @@ class DFA_ODENets(nn.Module):
         :return:
         """
 
-        state = torch.zeros((xt.shape[0], self.k_out + self.k_state + 2), device=xt.device) if state is None else state
+        state = torch.zeros((xt.shape[0], self.k_in+self.k_out + self.k_state + 2), device=xt.device) if state is None else state
         ht, cum_t, s = state[..., :-2], state[..., -2:-1], state[..., -1:]
-        new_ht = self.combinational_ode(s, ht, xt, dt)
+        new_ht = self.combinational_ode(s, ht, xt , dt)
         new_cum_t = cum_t + dt
 
         if new_s is None:

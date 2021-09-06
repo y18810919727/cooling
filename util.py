@@ -15,7 +15,7 @@ class SimpleLogger(object):
         #print('test dir', dir, 'from', f)
         if not os.path.exists(dir):
             os.makedirs(dir)
-        with open(f, 'w') as fID:
+        with open(f, 'w',encoding='utf-8') as fID:
             fID.write('%s\n'%header)
         self.f = f
 
@@ -24,7 +24,7 @@ class SimpleLogger(object):
         print(*args)
         #log to file
         try:
-            with open(self.f, 'a') as fID:
+            with open(self.f, 'a',encoding='utf-8') as fID:
                 fID.write(' '.join(str(a) for a in args)+'\n')
         except:
             print('Warning: could not log to', self.f)
