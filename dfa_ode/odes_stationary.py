@@ -43,7 +43,7 @@ class DFA_ODENets(nn.Module):
             for kind, state in state_transformation_predictor:
                 if kind == 'predict':
                     self.state_transformation_predictor[str(state)] = Predictor(
-                        self.k_in+self.k_in+self.k_state + self.k_state, self.k_state+self.k_in
+                        self.k_in+2+self.k_in+self.k_in+self.k_state + self.k_state,1+ self.k_state+self.k_in+1
                     )
                 elif kind == 'classify':
                     self.state_transformation_predictor[str(state)] = Classification(
@@ -60,9 +60,9 @@ class DFA_ODENets(nn.Module):
             Ly = nn.Linear(k_state, k_out)
         else:
             Ly = nn.Sequential(
-                nn.Linear(k_state+k_in, (k_state+k_in) * 2),
+                nn.Linear(k_state+k_in+1, (k_state+k_in+1) * 2),
                 nn.Tanh(),
-                nn.Linear((k_state+k_in) * 2, k_out)
+                nn.Linear((k_state+k_in+1) * 2, k_out)
             )
         return Ly
 
@@ -88,7 +88,7 @@ class DFA_ODENets(nn.Module):
             (min_values, max_values, s2)
         )
 
-    def state_transform(self, state, xt):
+    def state_transform(self, state, xt,x_in):
         """
 
         state the diffused states in ODEs  (batch_size, k_state+2)
@@ -113,7 +113,7 @@ class DFA_ODENets(nn.Module):
                     if 'predicted_stop_cum_time' not in extra_info.keys():
                         extra_info['predicted_stop_cum_time'] = torch.zeros_like(cum_t) * float('nan')
                         extra_info['real_cum_time'] = cum_t
-                    predicted_cum_t = predictor(ht[chosen_indices], xt[chosen_indices])
+                    predicted_cum_t = predictor(x_in[chosen_indices],ht[chosen_indices], xt[chosen_indices]) #新加x为输入
 
                     indices_time_out = (predicted_cum_t.squeeze(dim=-1) <= cum_t[chosen_indices].squeeze(dim=-1))
                     indices_time_out = chosen_indices[indices_time_out]
@@ -189,7 +189,7 @@ class DFA_ODENets(nn.Module):
                 nht[indices] = self.odes[i](ht[indices], xt[indices], dt[indices])
         return nht
 
-    def forward(self, state, xt, dt,new_s=None):  #给xt,dt预测新的输出或者state
+    def forward(self, state, xt, dt,new_s=None,x_in=None):  #给xt,dt预测新的输出或者state
         """
 
         :param state: The concatenation of ht, cum_t, cur_s : (bs, k_state + 2)
@@ -199,15 +199,17 @@ class DFA_ODENets(nn.Module):
         :return:
         """
 
-        state = torch.zeros((xt.shape[0], self.k_in+self.k_out + self.k_state + 2), device=xt.device) if state is None else state
+        state = torch.zeros((xt.shape[0], self.k_in+self.k_out + self.k_state + 2+1), device=xt.device) if state is None else state
         ht, cum_t, s = state[..., :-2], state[..., -2:-1], state[..., -1:]
+        s_cum_t = torch.sigmoid(cum_t)
+        xt = torch.cat([s_cum_t,xt], dim=-1)
         new_ht = self.combinational_ode(s, ht, xt , dt)
         new_cum_t = cum_t + dt
 
         if new_s is None:
             new_s, new_s_prob, _ = self.state_transform(
                 torch.cat([new_ht, cum_t, s], dim=-1),
-                xt
+                xt,x_in
             )
         updated_indices = (s.squeeze(dim=-1) != new_s.squeeze(dim=-1))   #更新下标，如果状态转移，那么那个状态的下标页转为0
         new_cum_t[updated_indices] = 0

@@ -40,7 +40,7 @@ class ODEMergeCell(nn.Module):
             assert k_state % 2 == 0, 'ode_2order=True mode requires the k_state is even.'
 
         if cell == 'gru':   #目前跑的都是gru cell
-            self.cell = nn.GRUCell(k_state+k_in, k_state+k_in)
+            self.cell = nn.GRUCell(k_state+k_in+1, k_state+k_in+1)
         elif cell == 'mlp':
             self.cell = MLPCell(k_state, k_state, bias=True)
 
@@ -98,7 +98,7 @@ class Predictor(nn.Module):
             nn.Linear(hidden, 1, bias=True),
         )
 
-    def forward(self, ht, xt):
+    def forward(self, x_in ,ht, xt):
         return self.net(
-            torch.cat([ht, xt], dim=-1)
+            torch.cat([x_in,ht, xt], dim=-1)
         )

@@ -2,4 +2,4 @@
 
 cd ..
 
-CUDA_VISIBLE_DEVICES=4 python main.py --save 0901_3.8_allp_pd --model DFA --dfa_yaml dfa_allp
+CUDA_VISIBLE_DEVICES=4 python main.py --save 0909_ns_allp_net_ns --model DFA --dfa_yaml dfa_allp

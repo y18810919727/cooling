@@ -62,7 +62,7 @@ class DFA_MIMO(nn.Module):
                                                     Ly_share=Ly_share)
         #self.register_buffer('state0', torch.zeros(k_state, ))  # fixed zero initial state
 
-    def states_classification(self, states, inputs):
+    def states_classification(self, states, inputs,t):
         reshape = False
         bs, l = None, None
         if len(states.shape) == 3:
@@ -70,9 +70,9 @@ class DFA_MIMO(nn.Module):
             bs, l, _ = states.shape
             states = states.reshape(-1, states.shape[-1]).contiguous()
             inputs = inputs.reshape(-1, inputs.shape[-1]).contiguous()
-
-        xt = torch.cat([inputs, self.expand_input(inputs)], dim=-1)
-        new_s, new_s_prob, extra_info = self.dfa_odes_forward.state_transform(states, xt)
+            t = t.reshape(-1, t.shape[-1]).contiguous()
+        xt = torch.cat([t,inputs, self.expand_input(inputs)], dim=-1)
+        new_s, new_s_prob, extra_info = self.dfa_odes_forward.state_transform(states, xt,inputs )
         if reshape:
             new_s_prob = new_s_prob.reshape(bs, l, -1)
             new_s = new_s.reshape(bs, l, -1)
@@ -122,8 +122,9 @@ class DFA_MIMO(nn.Module):
         for i in range(inputs.size(1)):
             x0 = inputs[:, i, :]
             dt_i = dt[:, i, :]
+            in_x_i = in_x[:, i, :]
             dfa_state_i = dfa_states[:, i, :] if dfa_states is not None else None
-            output, state = model(state, x0, dt=dt_i, new_s=dfa_state_i)
+            output, state = model(state, x0, dt=dt_i, new_s=dfa_state_i,x_in=in_x_i)
             outputs.append(output)
             states.append(state)
 

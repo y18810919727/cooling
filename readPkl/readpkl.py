@@ -31,17 +31,13 @@ if __name__ == '__main__':
 
     paras = parser.parse_args()
     paras.save = os.path.join('../results', paras.save)  # 路径拼接，改变paras.save为'results/tmp'
-    datasets=['train']
+    # 数据集['Data_train_1_7_1','Data_train_1_8k','Data_train_3_8k','Data_train_4_2k','Data_validate']
+    datasets=['Data_train_1_7_1','Data_train_1_8k','Data_train_3_8k','Data_train_4_2k','Data_validate']
     all_sqe_nums = {}
     len_sqe = []
     result_path = os.path.join(paras.save, 'predict_test')
     if not os.path.exists(result_path):
         os.mkdir(result_path)
-    file = open("../results/tmp1/1.pkl", "rb")
-    data = pickle.load(file)
-    X_mean = data['X_mean']
-    X_std = data['X_std']
-    dttest = data['dttest']
     error_all_mae = []
     error_all_mape = []
     test_rres = []
@@ -51,12 +47,14 @@ if __name__ == '__main__':
         filename = "predict_result/datafigs_"+everdata+".pkl"
         file=open(os.path.join(paras.save, filename),"rb")
         data=pickle.load(file)
-
+        X_mean = data['X_mean']
+        X_std = data['X_std']
+        Y_mean = data['Y_mean']
+        Y_std = data['Y_std']
         Ytest = data['y_target_test']
         y_pred_test = data['y_pred_test']
         Xtest = data['x_test']
-        Y_mean = data['Y_mean']
-        Y_std = data['Y_std']
+
         ttest = data['t_test']
         dttest = np.append(ttest[1:] - ttest[:-1], ttest[1] - ttest[0]).reshape(-1, 1)
         test_dfa_state_pred_array = data['test_dfa_state_pred_array']
