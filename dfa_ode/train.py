@@ -125,7 +125,7 @@ class EpochTrainer(object):
     #         new_dic[key] = dicts.get(key)
     #     return new_dic
 
-    def __call__(self, epoch):
+    def __call__(self, epoch) -> object:
 
         #sqe_head = 0;
         cum_bs = 0

@@ -5,7 +5,7 @@ transformations:   #规则转移
   - from: 1
     to: 2
     rules:
-      - [0 , geq , 19.9]    #满足这些规则，就能从一跳到2，1和2靠规则转移
+      - [0 , geq , 20]    #满足这些规则，就能从一跳到2，1和2靠规则转移
   - from: 4
     to: 1
     rules:

@@ -25,7 +25,6 @@ import traceback
 import shutil
 import yaml
 
-
 """
 potentially varying input parameters
 """
@@ -91,8 +90,9 @@ parser.add_argument("--short_encoding", action="store_true", help="Encoding shor
 parser.add_argument("--debug", action="store_true", help="debug mode, for acceleration")
 
 #数据集['Data_train_1_7_1','Data_train_1_8k','Data_train_3_8k','Data_train_4_2k','Data_validate']
-parser.add_argument("--datasets", type=list, default=['Data_train_1_7_1','Data_train_1_8k','Data_train_3_8k','Data_train_4_2k','Data_validate'], help="datasets")
-parser.add_argument("--describe", type=str, default="所有都采用预测器模式，ns预测，且时间预测器喂数据x", help="describe")
+#files = ['P-1.7k.csv','P-1.85k.csv','P-3.8K.csv','P-4.2k.csv','P-6.3k.csv']
+parser.add_argument("--datasets", type=list, default=['P-1.7k','P-1.85k','P-3.8k','P-4.2k','P-6.3k'], help="datasets")
+parser.add_argument("--describe", type=str, default="新数据集,新状态,ode_rnn,再试一次", help="describe")
 
 paras = parser.parse_args()
 
@@ -160,6 +160,8 @@ np.random.seed(paras.seed)
 
 logging('Random seed', paras.seed)
 
+
+
 """
 Load data
 """
@@ -170,8 +172,8 @@ datasets = paras.datasets        #datasets=['Data_train_1_7_1','Data_train_1_8k'
 all_sqe_nums = {}
 len_sqe = []
 if paras.debug: # Using short dataset for acceleration
-     Xtrain, Ytrain, ttrain, strain = [df.to_numpy(dtype=np.float32) for df in get_Dataset('./mydata/Front_Data_train_1_7_1.csv')]
-     Xdev, Ydev, tdev, sdev = [df.to_numpy(dtype=np.float32) for df in get_Dataset('./mydata/Back_Data_train_1_7_1.csv')]
+     Xtrain, Ytrain, ttrain, strain = [df.to_numpy(dtype=np.float32) for df in get_Dataset('./mydata2/train_P-1.7k.csv')]
+     Xdev, Ydev, tdev, sdev = [df.to_numpy(dtype=np.float32) for df in get_Dataset('./mydata2/P-1.7k.csv')]
      len_sqe.append(0)
      len_sqe.append(int(Xtrain.size / 2))
      all_sqe_nums['train'] =len_sqe
@@ -185,7 +187,7 @@ else:
     for everdata in datasets:
         len_sqe = []
         len_sqe.append(int(Xtrain.size/2))
-        X, Y, t, s = [df.to_numpy(dtype=np.float32) for df in get_Dataset('./mydata/Front_'+everdata+'.csv')]
+        X, Y, t, s = [df.to_numpy(dtype=np.float32) for df in get_Dataset('./mydata2/train_'+everdata+'.csv')]
         Xtrain = np.append(Xtrain,X).reshape(-1, 2)
         Ytrain = np.append(Ytrain,Y).reshape(-1, 3)
         ttrain = np.append(ttrain,t).reshape(-1, 1)
@@ -286,7 +288,7 @@ if not paras.test:
                      odes_para=dfa_setting['odes'],
                      ode_2order=dfa_setting['ode_2order'],
                      transformations=dfa_setting['transformations'],
-                     state_transformation_predictor=dfa_setting['predictors'], cell_type='merge',
+                     state_transformation_predictor=dfa_setting['predictors'], cell_type='rnn',
                      Ly_share=dfa_setting['Ly_share'])
 
     model.apply(init_weights)
@@ -336,8 +338,8 @@ try:  # catch error and redirect to logger
                 error_dev_sum = 0
                 # corresponding test result:
                 for everdata in datasets:
-                    Xtrain, Ytrain, ttrain, strain = [df.to_numpy(dtype=np.float32) for df in get_Dataset('./mydata/Front_'+everdata+'.csv')]
-                    Xdev, Ydev, tdev, sdev = [df.to_numpy(dtype=np.float32) for df in get_Dataset('./mydata/Back_'+everdata+'.csv')]  #验证集也改为和测试集一样
+                    Xtrain, Ytrain, ttrain, strain = [df.to_numpy(dtype=np.float32) for df in get_Dataset('./mydata2/train_'+everdata+'.csv')]
+                    Xdev, Ydev, tdev, sdev = [df.to_numpy(dtype=np.float32) for df in get_Dataset('./mydata2/'+everdata+'.csv')]  #验证集也改为和测试集一样
                     dttrain = np.append(ttrain[1:] - ttrain[:-1], ttrain[1] - ttrain[0]).reshape(-1,1)  # 化为1列,从1到最后减去从0到
                     dtdev = np.append(tdev[1:] - tdev[:-1], tdev[1] - tdev[0]).reshape(-1, 1)
                     Ytrain, Ydev = [(Y - Y_mean) / Y_std for Y in [Ytrain, Ydev]]  # 标准化处理
@@ -387,6 +389,8 @@ try:  # catch error and redirect to logger
                     # (2) forecast on dev data
                     # Ydev_pred, hdev_pred = model(Xdev_tn, state0=htrain_pred[:, -1, :], dt=dtdev_tn)
 
+
+
                     Ydev_pred, hdev_pred = model.encoding_plus_predict(
                         Xdev_tn,  dtdev_tn,  Ydev_tn[:, :paras.bptt], sdev_tn[:, :paras.bptt], paras.bptt,
                         sdev_tn[:, paras.bptt:])
@@ -402,32 +406,32 @@ try:  # catch error and redirect to logger
                     # log_value('train/error', error_train, epoch)
                     # log_value('dev/loss', mse_dev, epoch)
                     # log_value('dev/error', error_dev, epoch)
-                    current_trainresults_path = os.path.join(paras.save, 'current_trainresults')
-                    if not os.path.exists(current_trainresults_path):
-                        os.mkdir(current_trainresults_path)
+                    # current_trainresults_path = os.path.join(paras.save, 'current_trainresults')
+                    # if not os.path.exists(current_trainresults_path):
+                    #     os.mkdir(current_trainresults_path)
+                    #
+                    # current_devresults_path = os.path.join(paras.save, 'current_devresults')
+                    # if not os.path.exists(current_devresults_path):
+                    #     os.mkdir(current_devresults_path)
+                    #
+                    # best_dev_devresults_path = os.path.join(paras.save, 'best_dev_devresults')
+                    # if not os.path.exists(best_dev_devresults_path):
+                    #     os.mkdir(best_dev_devresults_path)
 
-                    current_devresults_path = os.path.join(paras.save, 'current_devresults')
-                    if not os.path.exists(current_devresults_path):
-                        os.mkdir(current_devresults_path)
+                    # logging('epoch %04d |%s| loss %.3f (train), %.3f (dev) | error %.3f (train), %.3f (dev) | tt %.2fmin'%
+                    #         (epoch,everdata ,mse_train, mse_dev, error_train, error_dev, (time()-t00)/60.))
 
-                    best_dev_devresults_path = os.path.join(paras.save, 'best_dev_devresults')
-                    if not os.path.exists(best_dev_devresults_path):
-                        os.mkdir(best_dev_devresults_path)
-
-                    logging('epoch %04d |%s| loss %.3f (train), %.3f (dev) | error %.3f (train), %.3f (dev) | tt %.2fmin'%
-                            (epoch,everdata ,mse_train, mse_dev, error_train, error_dev, (time()-t00)/60.))
-
-                    show_data(ttrain[paras.bptt:], Ytrain[paras.bptt:], t2np(Ytrain_pred), current_trainresults_path, 'current_trainresults',everdata,
-                                   msg='train results (train error %.3f) at iter %d-%s' % (error_train, epoch,everdata))
-
-                    show_data(tdev[paras.bptt:], Ydev[paras.bptt:], t2np(Ydev_pred),current_devresults_path, 'current_devresults',everdata,
-                                   msg='dev results (dev error %.3f) at iter %d-%s' % (error_dev, epoch,everdata))
+                    # show_data(ttrain[paras.bptt:], Ytrain[paras.bptt:], t2np(Ytrain_pred), current_trainresults_path, 'current_trainresults',everdata,
+                    #                msg='train results (train error %.3f) at iter %d-%s' % (error_train, epoch,everdata))
+                    #
+                    # show_data(tdev[paras.bptt:], Ydev[paras.bptt:], t2np(Ydev_pred),current_devresults_path, 'current_devresults',everdata,
+                    #                 msg='dev results (dev error %.3f) at iter %d-%s' % (error_dev, epoch,everdata))
 
                     dev_path = os.path.join(paras.save, 'predict_seq/visualizations-dev-{}'.format(epoch))  # 分别创建文件夹
                     if not os.path.exists(dev_path):
                         os.mkdir(dev_path)
-                    np.save('{}/predict_seq/visualizations-dev-{}/{}_dev_result_{}'.format(paras.save, epoch,everdata, epoch),
-                            np.stack([Ydev[paras.bptt:], t2np(Ydev_pred)]))
+                    # np.save('{}/predict_seq/visualizations-dev-{}/{}_dev_result_{}'.format(paras.save, epoch,everdata, epoch),
+                    #         np.stack([Ydev[paras.bptt:], t2np(Ydev_pred)]))
                     # 画验证集
                     visualize_prediction(
                         Ydev[paras.bptt:] * Y_std + Y_mean, t2np(Ydev_pred) * Y_std + Y_mean, sdev[paras.bptt:],Xdev[paras.bptt:,0]* X_std[0] + X_mean[0],
@@ -435,9 +439,24 @@ try:  # catch error and redirect to logger
                         os.path.join(paras.save, 'predict_seq'),
                         seg_length=paras.visualization_len, dir_name='visualizations-dev-%s/%s' %( str(epoch), everdata))
 
+                    predict_result = os.path.join(paras.save, 'predict_result/')
+                    if not os.path.exists(predict_result):
+                        os.mkdir(predict_result)
+                    dev_result = os.path.join(predict_result, 'dev/')
+                    if not os.path.exists(dev_result):
+                        os.mkdir(dev_result)
+                    dev_result = os.path.join(dev_result, 'epoch_%s'%(str(epoch)))
+                    if not os.path.exists(dev_result):
+                        os.mkdir(dev_result)
+                    pickle.dump(
+                        {'t_tdev': tdev, 'y_target_dev': Ydev, 'y_pred_dev': t2np(Ydev_pred), 'x_dev': Xdev,
+                         'sdev': sdev[paras.bptt:],
+                         'Y_mean': Y_mean, 'Y_std': Y_std, 'X_mean': X_mean, 'X_std': X_std},
+                        open(os.path.join(dev_result, 'datafigs_{}.pkl'.format(everdata)), 'wb'))
+
                     # make figure of best model on train, dev and test set for debugging
-                    show_data(tdev, Ydev, t2np(Ydev_pred), best_dev_devresults_path, 'best_dev_devresults',everdata,
-                              msg='dev results (dev error %.3f) at iter %d-%s' % (error_dev, epoch,everdata))
+                    # show_data(tdev, Ydev, t2np(Ydev_pred), best_dev_devresults_path, 'best_dev_devresults',everdata,
+                    #           msg='dev results-%s' % (error_dev, epoch,everdata))
 
                 #验证集上，如果误差比最好的要小
                 #验证集上达到一个最好的效果，拿测试集做预测，看效果
@@ -446,16 +465,14 @@ try:  # catch error and redirect to logger
                     best_dev_error = error_dev_sum
                     best_dev_epoch = epoch
                     log_value('dev/best_error', best_dev_error, epoch)
-
                     logging('new best dev error %.3f' % best_dev_error)
                     error_all_mae = []
                     error_all_mape = []
-                    test_rres = []
                     error_test_sum = 0
 
                     for everdata in datasets:
                         Xtest, Ytest, ttest, stest = [df.to_numpy(dtype=np.float32) for df in
-                                                  get_Dataset('./mydata/Back_'+everdata+'.csv')]
+                                                  get_Dataset('./mydata2/'+everdata+'.csv')]
                         dttest = np.append(ttest[1:] - ttest[:-1], ttest[1] - ttest[0]).reshape(-1, 1)
                         # Y_mean, Y_std = array_operate_with_nan(Ytest, np.mean), array_operate_with_nan(Ytest, np.std)  # 归一化
                         # X_mean, X_std = array_operate_with_nan(Xtest, np.mean), array_operate_with_nan(Xtest, np.std)
@@ -478,21 +495,16 @@ try:  # catch error and redirect to logger
                             Xtest_tn,  dttest_tn,  Ytest_tn[:, :paras.bptt], stest_tn[:, :paras.bptt], paras.bptt,
                             stest_tn[:, paras.bptt:] if paras.dfa_known else None)
                         # mse_test = model.criterion(Ytest_pred, Ytest_tn[paras.bptt:]).item()
-                        error_test = prediction_error(Ytest[paras.bptt:], t2np(Ytest_pred))
-                        error_test_sum +=error_test
                         #根据预测的结果，看一下模型每个时间点的状态分类
                         test_dfa_state_pred_array = model.select_dfa_states(test_state_pred[0]).int().detach().cpu().numpy()
-
                         #log_value('test/corresp_error', error_test, epoch)
-                        test_rres.append(error_test)
-
                         predict_path = os.path.join(paras.save, 'predict_seq/visualizations-test-{}'.format(epoch))
                         if not os.path.exists(predict_path):
                             os.mkdir(predict_path)
 
-                        #将状态结果保存到目录里面
-                        np.save('{}/predict_seq/visualizations-test-{}/{}_test_result_{}'.format(paras.save,epoch,everdata, epoch),
-                                np.stack([Ytest[paras.bptt:], t2np(Ytest_pred)]))
+                        # #将状态结果保存到目录里面
+                        # np.save('{}/predict_seq/visualizations-test-{}/{}_test_result_{}'.format(paras.save,epoch,everdata, epoch),
+                        #         np.stack([Ytest[paras.bptt:], t2np(Ytest_pred)]))
                         #画图可视化出来，画测试集
                         visualize_prediction(
                             Ytest[paras.bptt:] * Y_std + Y_mean, t2np(Ytest_pred) * Y_std + Y_mean, test_dfa_state_pred_array,Xtest[paras.bptt:,0]* X_std[0] + X_mean[0],
@@ -506,24 +518,26 @@ try:  # catch error and redirect to logger
                             draw_table(everdata, integral, error, paras.powertime,  os.path.join(paras.save, 'predict_seq'), dir_name='visualizations-test-%s/%s' % (str(best_dev_epoch) , everdata))
                         error_all_mae.append(str(error[0][0])+" ± "+str(error[1][0]))
                         error_all_mape.append(str(error[0][1])+" ± "+str(error[1][1]))
-                        show_data(ttest, Ytest, t2np(Ytest_pred), paras.save+'/predict_seq/visualizations-test-%s'  % (str(best_dev_epoch)),
-                                  'best_dev_testresults', everdata,
-                                  msg='test results (test error %.3f) at iter %d (=best dev) -%s' % (error_test, epoch,everdata))
+                        # show_data(ttest, Ytest, t2np(Ytest_pred), paras.save+'/predict_seq/visualizations-test-%s'  % (str(best_dev_epoch)),
+                        #           'best_dev_testresults', everdata,
+                        #           msg='test results (test error %.3f) at iter %d (=best dev) -%s' % (error_test, epoch,everdata))
 
                         # save model
                         #torch.save(model.state_dict(), os.path.join(paras.save, 'best_dev_model_state_dict.pt'))
                         torch.save(model, os.path.join(paras.save, 'best_dev_model.pt'))  #存最好的模型
-
                         predict_result = os.path.join(paras.save, 'predict_result/')
                         if not os.path.exists(predict_result):
                             os.mkdir(predict_result)
 
+                        predict_result = os.path.join(predict_result, 'test/')
+                        if not os.path.exists(predict_result):
+                            os.mkdir(predict_result)
                         pickle.dump({'t_test': ttest, 'y_target_test': Ytest, 'y_pred_test': t2np(Ytest_pred),'x_test':Xtest,'test_dfa_state_pred_array':test_dfa_state_pred_array,
                                      'Y_mean':Y_mean,'Y_std':Y_std,'X_mean':X_mean,'X_std':X_std},
                                     open(os.path.join(predict_result, 'datafigs_{}.pkl'.format(everdata)), 'wb'))
 
                     error_all=[error_all_mae,error_all_mape]
-                    draw_table_all(datasets, error_all,[ test_rres] , os.path.join(paras.save, 'predict_seq'))
+                    draw_table_all(datasets, error_all , os.path.join(paras.save, 'predict_seq'))
                     #draw_table_all(datasets,test_rres,os.path.join(paras.save, 'predict_seq'))
                 elif epoch - best_dev_epoch > max_epochs_no_decrease:
                     logging('Development error did not decrease over %d epochs -- quitting.'%max_epochs_no_decrease)

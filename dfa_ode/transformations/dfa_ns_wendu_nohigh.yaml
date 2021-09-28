@@ -1,25 +1,22 @@
 ode_nums: 5
 # 'Ti', 'Pcooling', 'Power cooling'
 # Definitions of DFA states  ['unknown', 'closed', 'start-1', 'start-2', 'cooling', 'stop']
-transformations:
-  - from: 1
-    to: 2
-    rules:
-      - [0 , geq , 19.9]
+transformations:   #规则转移
   - from: 4
     to: 1
     rules:
     - [0 ,leq, 12]
 predictors:
-  - ['predict', 2]
+  - ['predict', 1]   #2和3需要预测期
+  - ['predict', 2]   #2和3需要预测期
   - ['predict', 3]
 ode_2order: False
-Ly_share: True
+Ly_share: False
 
 # The type of odes.y:
-#   s: stationary           dy_dt = f(ht) - yt   稳定性
+#   s: stationary           dy_dt = f(ht) - yt
 #   n: non-stationary       dy_dt = f(ht)
-#   d: directed prediction  yt = f(ht)
+#   d: directed prediction  yt = f(ht) 直接预测
 odes:
 - name: unknown
   cell: gru
@@ -40,4 +37,3 @@ odes:
 - name: cooling
   cell: gru
   y_type: ['n', 's', 's']
-

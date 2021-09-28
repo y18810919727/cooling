@@ -28,21 +28,24 @@ set up model
 
 
 parser.add_argument("--low", type=float, default=12, help='The temperature activating the work of cooling')
-parser.add_argument("--high", type=float, default=20, help='The temperature stopping the cooling system')
+parser.add_argument("--high", type=float, default=19.9, help='The temperature stopping the cooling system')
 parser.add_argument("--model", type=str, default='best_dev_model-Copy1')
 parser.add_argument("--interpol", type=str, default='constant', choices=['constant', 'linear'])
-parser.add_argument("--bptt", type=int, default=400, help="bptt")
+parser.add_argument("--bptt", type=int, default=800, help="bptt")
 parser.add_argument("--data", type=str, default='test.csv')
 parser.add_argument("--save_dir", type=str, default='None')
 #数据集
 parser.add_argument("--datasets", type=list, default=['Data_train_1_7_1','Data_train_1_8k','Data_train_3_8k','Data_train_4_2k','Data_validate'], help="datasets")
-
+parser.add_argument("--save", type=str, default='9.22_2')
 
 
 if __name__ == '__main__':
 
     paras = parser.parse_args()
     paras.save_dir = os.path.join('optimization', 'results', paras.model)
+    if not os.path.exists(paras.save_dir):
+        os.mkdir(paras.save_dir)
+    paras.save_dir = os.path.join(paras.save_dir,paras.save)
     if not os.path.exists(paras.save_dir):
         os.mkdir(paras.save_dir)
     # 导入入归一化值
@@ -54,8 +57,9 @@ if __name__ == '__main__':
     Y_mean = data['Y_mean']
     Y_std = data['Y_std']
 
-
-    for everdata in paras.datasets:
+    sum_powers_all = []
+    Pserver = ['P-1.7k','P-1.9k','P-3.8k','P-4.2k','P-6.3k']
+    for idx,everdata in enumerate(paras.datasets):
 
         sum_powers = []  # 遍历从min到max
         Min = 12
@@ -80,12 +84,12 @@ if __name__ == '__main__':
             dttest_tn = dttest_tn.cuda()
             stest_tn = stest_tn.cuda()
 
-        save_dir = os.path.join(paras.save_dir,everdata)
+        save_dir = os.path.join(paras.save_dir,Pserver[idx])
         if not os.path.exists(save_dir):
             os.mkdir(save_dir)
-        log_file = os.path.join(save_dir, '%s-%.2f-%.2f-log.txt' % (everdata,paras.low, paras.high))
+        log_file = os.path.join(save_dir, '%s-%.2f-%.2f-log.txt' % (Pserver[idx],paras.low, paras.high))
         logging = SimpleLogger(log_file)  # log to file
-        logging('dataset: %s, Min: %.2f, Max: %.3f, ' % (everdata,Min, Max))
+        logging('dataset: %s, Min: %.2f, Max: %.3f, ' % (Pserver[idx],Min, Max))
         for low in np.arange(Min, Max, step):
             #paras.low = low
             #log_file = os.path.join(paras.save_dir, ' %.2f-%.2f-log.txt' % (paras.low, paras.high))
@@ -109,12 +113,19 @@ if __name__ == '__main__':
             predicted_power = (t2np(Ytest_pred) * Y_std + Y_mean)[..., -1].reshape(-1)  # 算power
             predicted_power[predicted_power < 0] = 0
             sum_power = (
-                    predicted_power *
-                    dttest_tn[:, paras.bptt:].reshape(-1).detach().cpu().numpy()
+                    predicted_power[:7200] *
+                    dttest_tn[:, paras.bptt:paras.bptt+7200].reshape(-1).detach().cpu().numpy()
             ).sum()
             logging('Low: %.2f, High: %.3f, Predicted Power: %.3f' % (low, paras.high, float(sum_power)))
 
             sum_powers.append(sum_power)
+        sum_powers_all.append(sum_powers)
+        plt.title(Pserver[idx] + " - " + 'Power')
+        plt.plot(np.arange(Min, Max, step), sum_powers)
+        plt.xlabel('The set point of lower bound temperature in cooling system')
+        plt.ylabel('Power Consumption')
+        plt.savefig(os.path.join(save_dir, '%s-%.1f-%.1f-%.1f.png' % (Pserver[idx],Min, Max, step)))
+        plt.close()
 
 
         # if os.path.exists(log_file):
@@ -127,8 +138,13 @@ if __name__ == '__main__':
         # else:
 
 
-        plt.plot(np.arange(Min, Max, step), sum_powers)
-        plt.xlabel('The set point of lower bound temperature in cooling system')
-        plt.ylabel('Power Consumption')
-        plt.savefig(os.path.join(save_dir, '%.1f-%.1f-%.1f.png' % (Min, Max, step)))
 
+    plt.title('all' + " - " + 'Power')
+    plt.figure()
+    for i,sum_power in enumerate(sum_powers_all):
+        plt.plot(np.arange(Min, Max, step), sum_power,label = Pserver[i])
+        plt.legend()
+    plt.xlabel('The set point of lower bound temperature in cooling system')
+    plt.ylabel('Power Consumption')
+    plt.savefig(os.path.join(paras.save_dir, '%.1f-%.1f-%.1f.png' % (Min, Max, step)))
+    plt.close()

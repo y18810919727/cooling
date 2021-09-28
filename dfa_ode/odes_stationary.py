@@ -7,7 +7,7 @@ import json
 
 import torch
 from torch import nn
-from dfa_ode.modules import Classification, Predictor, MLPCell, ODEMergeCell
+from dfa_ode.modules import Classification, Predictor, MLPCell, ODEMergeCell,ODE_RNN
 from common.modules import MSELoss_nan
 from torch import nn
 from collections import defaultdict
@@ -27,6 +27,8 @@ class DFA_ODENets(nn.Module):
         self.y_std = nn.Parameter(torch.FloatTensor(y_std), requires_grad=False)
         if cell_type == 'merge':   #odecell 每个ode的cell
             ODECellClass = ODEMergeCell
+        elif cell_type == 'rnn':
+            ODECellClass = ODE_RNN
         # elif cell_type == 'cde':
         #     ODECellClass = CDECell
         else:
@@ -189,6 +191,14 @@ class DFA_ODENets(nn.Module):
                 nht[indices] = self.odes[i](ht[indices], xt[indices], dt[indices])
         return nht
 
+    def Rnn_ode(self, s, ht, xt,dt,s_cum_t): #对于不同的状态，找对应的ode
+        nht = torch.zeros_like(ht)
+        for i in range(self.ode_nums):
+            indices = (s.squeeze(dim=-1) == i) #判断是哪个状态
+            if torch.any(indices):
+                nht[indices] = self.odes[i](ht[indices], xt[indices], dt[indices],s_cum_t[indices])
+        return nht
+
     def forward(self, state, xt, dt,new_s=None,x_in=None):  #给xt,dt预测新的输出或者state
         """
 
@@ -203,7 +213,12 @@ class DFA_ODENets(nn.Module):
         ht, cum_t, s = state[..., :-2], state[..., -2:-1], state[..., -1:]
         s_cum_t = torch.sigmoid(cum_t)
         xt = torch.cat([s_cum_t,xt], dim=-1)
-        new_ht = self.combinational_ode(s, ht, xt , dt)
+
+        if self.cell_type == 'merge':   #odecell 每个ode的cell
+            new_ht = self.combinational_ode(s, ht, xt , dt)
+        elif self.cell_type == 'rnn':
+            new_ht = self.Rnn_ode(s, ht, xt ,dt,s_cum_t)
+
         new_cum_t = cum_t + dt
 
         if new_s is None:

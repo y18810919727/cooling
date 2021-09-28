@@ -21,6 +21,45 @@ class MLPCell(nn.Module):
     def forward(self, xt, ht):
         return self.net(torch.cat([xt, ht], dim=-1))
 
+class ODE_RNN(nn.Module):
+    def __init__(self, k_in, k_out, k_state, num_layers, Ly, hidden_size=32, ode_2order=False,
+                 name='default', y_type=None, cell='gru'):
+        super().__init__()
+        self.k_in = k_in
+        self.k_out = k_out
+        self.k_state = k_state
+        self.name = name
+        self.ode_2order = ode_2order
+        self.f  = nn.Sequential(
+            nn.Linear(k_state+k_in+1+1, (k_state+k_in + 1+1) * 2),
+            nn.Tanh(),
+            nn.Linear((k_state+k_in + 1+1) * 2, k_state+k_in+1)
+        )
+        if cell == 'gru':   #目前跑的都是gru cell
+            self.cell = nn.GRUCell(k_state+k_in+1,  k_state+k_in+1)
+        y_type = [0 if x == 'd' else x for x in y_type]
+        y_type = [0 if x == 's' else x for x in y_type]
+        y_type = [0 if x == 'n' else x for x in y_type]
+        self.y_type = y_type
+        self.Ly = Ly
+
+    def forward(self, state, xt,dt,ti):
+
+        yt, ht = state[..., :self.k_out], state[..., self.k_out:]
+        ht_dt = ht +(self.f(torch.cat([ht,ti], dim=-1))*dt)
+        ht = self.cell(xt,ht_dt)
+        yt = self.update_y(yt, ht)
+        return torch.cat([yt, ht], dim=-1)
+
+
+    def update_y(self, yt, ht):
+        Ly_out = self.Ly(ht)
+        y_type = torch.LongTensor(self.y_type).to(yt.device)
+        nyt = torch.clone(yt)
+        nyt[..., y_type == 0] = Ly_out[..., y_type == 0]
+        return nyt
+
+
 
 class ODEMergeCell(nn.Module):
     def __init__(self, k_in, k_out, k_state, num_layers, Ly, hidden_size=32, ode_2order=False,

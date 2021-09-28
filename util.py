@@ -75,7 +75,7 @@ def draw_table(file,integral,error,length,base_dir,dir_name='visualizations'):
     plt.close()
 
 
-def draw_table_all(file,error_all,test_rres,base_dir):
+def draw_table_all(file,error_all,base_dir):
 
     if not os.path.exists(base_dir):
         os.mkdir(base_dir)
@@ -86,22 +86,7 @@ def draw_table_all(file,error_all,test_rres,base_dir):
     # 行名
     row = ["mae", "mape"]
     # 表格里面的具体值
-    plt.subplot(2, 1, 1)
     plt.title('error_all')
-    tab = plt.table(cellText=vals,
-                    colLabels=col,
-                    rowLabels=row,
-                    loc='center',
-                    cellLoc='center',
-                    rowLoc='center')
-    tab.scale(1, 2)
-    plt.axis('off')
-
-    row = ["rres"]
-    vals = test_rres
-
-    plt.subplot(2, 1, 2)
-    plt.title('rrse')
     tab = plt.table(cellText=vals,
                     colLabels=col,
                     rowLabels=row,
@@ -171,7 +156,7 @@ def show_data(t, target, pred, folder, tag ,everdata,msg=''):
     #for i, ax in enumerate(axs):
     #    ax.plot(target[:, i], 'g--', pred[:, i], 'r-')
 
-    plt.savefig("%s/%s-%spng"%(folder, tag,everdata))
+    plt.savefig("%s/%s-%s.png"%(folder, tag,everdata))
     plt.close('all')
 
 
@@ -249,7 +234,8 @@ def add_state_label(df):
             elif cooling == 23300:
                 cur_state = 4
         elif cur_state == 1:
-            if ti >= 20:
+            #if ti >= 20:
+            if np - power > 200 and ti >= 20:
                 cur_state = 2
         elif cur_state == 2:
             if power > np and power > 5000:
@@ -359,6 +345,45 @@ def visualize_prediction(Y_label, Y_pred, s_test, pserver,base_dir, seg_length=5
         ))
         plt.close()
 
+
+def visualize_prediction_compare(Y_label, Y_pred, s_test, pserver,base_dir, seg_length=500, dir_name='visualizations'):
+    assert len(Y_pred) == len(Y_label)
+    if not os.path.exists(os.path.join(base_dir, dir_name)):
+        os.mkdir(os.path.join(base_dir, dir_name))
+    max_state = int(np.max(s_test))
+    ID = 0
+    for begin in range(0, len(Y_pred), seg_length):
+        ID += 1
+        plt.figure(figsize=(18, 15))
+        y_label_seg = Y_label[begin:min(begin + seg_length, len(Y_label))]
+        y_pred_seg = Y_pred[begin:min(begin + seg_length, len(Y_pred))]
+        s_test_seg = s_test[begin:min(begin + seg_length, len(Y_pred))]
+        #         scatter = plt.scatter(np.arange(begin, begin+len(tdf)), tdf['Power cooling'], c=tdf['states'], s=10)
+        X = np.arange(begin, begin + len(y_label_seg))
+        outputs_names = ['Ti', 'Pcooling', 'Power cooling']
+        classes = ['unknown', 'closed', 'start-1', 'start-2', 'cooling']
+
+        for i, y_name in enumerate(outputs_names):
+            plt.subplot(3, 2, i * 2 + 2)
+            y_label = y_label_seg[:, i]
+            y_pred = y_pred_seg[:, i]
+            for state in range(max_state+1):
+                indices = (s_test_seg.squeeze(axis=-1) == state)
+                scatter = plt.scatter(X[indices], y_pred[indices], label='pred-'+classes[state], s=5, marker='o')
+            plt.xlabel('indexes')
+            plt.ylabel(y_name)
+            plt.legend()
+            plt.subplot(3, 2, i * 2 + 1)
+
+            plt.plot(X, y_label, '-k', label='Time Series')
+            plt.xlabel('indexes')
+            plt.ylabel(y_name)
+            plt.legend()
+
+        plt.savefig(os.path.join(
+            base_dir, dir_name, '%i-%i-%i.png' % (ID, begin, begin + seg_length)
+        ))
+        plt.close()
 
 def display_states_confusion_matrix(true, pred, path, labels, print_handle=print):
 
