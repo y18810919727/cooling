@@ -6,7 +6,7 @@ import argparse
 import numpy as np
 
 
-from util import SimpleLogger, show_data, init_weights, array_operate_with_nan, get_Dataset, visualize_prediction, t2np, draw_table,draw_table_all,calculation_ms,visualize_prediction_compare
+from util import SimpleLogger, show_data, init_weights, array_operate_with_nan, get_Dataset, visualize_prediction, t2np, draw_table,draw_table_all,calculation_ms,visualize_prediction_compare,draw_power_error
 parser = argparse.ArgumentParser(description='Models for Continuous Stirred Tank dataset')
 parser.add_argument("--save", type=str, default='test', help="experiment logging folder")
 parser.add_argument("--bptt", type=int, default=800, help="bptt")
@@ -49,12 +49,13 @@ def rrse(truth, prediction):
 
 
 
+
 if __name__ == '__main__':
 
     paras = parser.parse_args()
     paras.save = os.path.join('../results', paras.save)  # 路径拼接，改变paras.save为'results/tmp'
     # 数据集['Data_train_1_7_1','Data_train_1_8k','Data_train_3_8k','Data_train_4_2k','Data_validate']
-    datasets=['P-1.7k','P-1.85k','P-3.8K','P-4.2k','P-6.3k']
+    datasets=['P-1.7k','P-3.8K','P-4.2k','P-6.3k']
     all_sqe_nums = {}
     len_sqe = []
     result_path = os.path.join(paras.save, 'predict_result')
@@ -70,7 +71,7 @@ if __name__ == '__main__':
 
     log_file = os.path.join(dev_path, 'rrse.txt')
     logging = SimpleLogger(log_file)  # log to file
-
+    all_power_error = []
     for everdata in datasets:
 
         #测试集
@@ -91,17 +92,23 @@ if __name__ == '__main__':
         ttest = data['t_test']
         dttest = np.append(ttest[1:] - ttest[:-1], ttest[1] - ttest[0]).reshape(-1, 1)
         test_dfa_state_pred_array = data['test_dfa_state_pred_array']
-        visualize_prediction_compare( Ytest[paras.bptt:] * Y_std + Y_mean, y_pred_test * Y_std + Y_mean, test_dfa_state_pred_array,Xtest[paras.bptt:,0]* X_std[0] + X_mean[0],
-                                    test_path,
-                                    seg_length=2000, dir_name='%s' %(everdata))# 模型自己预测的
+        # visualize_prediction_compare( Ytest[paras.bptt:] * Y_std + Y_mean, y_pred_test * Y_std + Y_mean, test_dfa_state_pred_array,Xtest[paras.bptt:,0]* X_std[0] + X_mean[0],
+        #                             test_path,
+        #                             seg_length=2000, dir_name='%s' %(everdata))# 模型自己预测的
 
-        integral, error = calculation_ms(Ytest[paras.bptt:, 2] * Y_std[2] + Y_mean[2],
-                                     y_pred_test[:, 2] * Y_std[2] + Y_mean[2], dttest, paras.powertime)
-        if (int(len(integral[0])) != 0):
-            draw_table(everdata, integral, error,  paras.powertime, test_path,dir_name='%s' %(everdata))
+        # integral, error = calculation_ms(Ytest[paras.bptt:, 2] * Y_std[2] + Y_mean[2],
+        #                              y_pred_test[:, 2] * Y_std[2] + Y_mean[2], dttest, paras.powertime)
+        # if (int(len(integral[0])) != 0):
+        #     draw_table(everdata, integral, error,  paras.powertime, test_path,dir_name='%s' %(everdata))
+        ever_power_error = []
+        for i in range(5,125,5):
+            integral, error = calculation_ms(Ytest[paras.bptt:, 2] * Y_std[2] + Y_mean[2],
+                           y_pred_test[:, 2] * Y_std[2] + Y_mean[2], dttest, i*60)
+            ever_power_error.append(error[0][1])
+        all_power_error.append(ever_power_error)
         #print(data)
         file.close()
-
+    draw_power_error(all_power_error,datasets,dir_name=test_path)
 
 
         # 验证集

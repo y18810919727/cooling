@@ -29,6 +29,7 @@ class SimpleLogger(object):
         except:
             print('Warning: could not log to', self.f)
 
+
 def draw_table(file,integral,error,length,base_dir,dir_name='visualizations'):
 
     if not os.path.exists(os.path.join(base_dir, dir_name)):
@@ -285,6 +286,23 @@ def get_mlp_network(layer_sizes, outputs_size):
         nn.Linear(layer_sizes[-1], outputs_size)
     )
     return nn.Sequential(*modules_list)
+
+
+#画功耗误差折线图
+def draw_power_error(data,datasets,dir_name='visualizations'):
+    plt.figure(figsize=(9, 9))
+    plt.tick_params(labelsize=15)
+    plt.title('power-error', fontsize=18)
+    plt.xlabel('time(m)',fontsize=15)
+    plt.ylabel("power_error(%)",fontsize=15)
+    X = [i for  i in range(5,125, 5)]
+    for id,everdata in enumerate(datasets):
+        plt.plot(X, data[id], label=everdata)
+    plt.legend(fontsize=15)
+    plt.savefig(os.path.join(
+        dir_name, 'power_error.png'
+    ))
+    plt.close()
 
 
 def visualize_prediction(Y_label, Y_pred, s_test, pserver,base_dir, seg_length=500, dir_name='visualizations'):

@@ -93,6 +93,7 @@ parser.add_argument("--debug", action="store_true", help="debug mode, for accele
 #files = ['P-1.7k.csv','P-1.85k.csv','P-3.8K.csv','P-4.2k.csv','P-6.3k.csv']
 parser.add_argument("--datasets", type=list, default=['P-1.7k','P-1.85k','P-3.8k','P-4.2k','P-6.3k'], help="datasets")
 parser.add_argument("--describe", type=str, default="新数据集,新状态,ode_rnn,再试一次", help="describe")
+parser.add_argument("--mymodel", type=str, default='merge', choices=['merge', 'rnn', 'one'])
 
 paras = parser.parse_args()
 
@@ -288,7 +289,7 @@ if not paras.test:
                      odes_para=dfa_setting['odes'],
                      ode_2order=dfa_setting['ode_2order'],
                      transformations=dfa_setting['transformations'],
-                     state_transformation_predictor=dfa_setting['predictors'], cell_type='rnn',
+                     state_transformation_predictor=dfa_setting['predictors'], cell_type='merge',
                      Ly_share=dfa_setting['Ly_share'])
 
     model.apply(init_weights)

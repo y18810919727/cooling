@@ -3,10 +3,7 @@ ode_nums: 1
 # Definitions of DFA states  ['unknown', 'closed', 'start-1', 'start-2', 'cooling', 'stop']
 transformations: []
 predictors:
-  - ['predict', 1]
-  - ['predict', 2]
-  - ['predict', 3]
-  - ['predict', 4]
+  - ['predict', 0]
 ode_2order: False
 Ly_share: True
 
