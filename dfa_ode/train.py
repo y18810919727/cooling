@@ -16,7 +16,7 @@ by chunking into bbtt-long segments.
 class EpochTrainer(object):
     #前期的准备 np转cuda
     def __init__(self, model, optimizer, epochs, X, Y, states, dt, batch_size=1, gpu=False, bptt=50,all_sqe_nums=False,
-                 save_dir='./', short_encoding=False, logging=None, debug=False):
+                 save_dir='./', short_encoding=False, logging=None, debug=False,mymodel=None):
 
         tr = TimeRecorder()
         self.model = model
@@ -38,7 +38,7 @@ class EpochTrainer(object):
         self.logging = logging
         self.short_encoding = short_encoding
         self.save_dir = save_dir
-
+        self.mymodel = mymodel
         self.logging('Trainer initialization')
 
         with tr('set_train_tensor'):
@@ -133,10 +133,6 @@ class EpochTrainer(object):
         np.random.shuffle(self.train_list)  # 每个下标对应一个窗口，打散
         train_inds = self.train_list
 
-        epoch_loss_classification = 0.
-        epoch_loss_pred = 0.
-
-
         # Generating Time Recoder
         tr = TimeRecorder()
 
@@ -207,62 +203,64 @@ class EpochTrainer(object):
             # )
 
 
+            if self.mymodel != 'one':
+                # The model determines the dfa states at time t by itself based on h(t-1), state(t-1), x(t).
+                #时间预测状态
+                states_last_step = torch.cat([state0.unsqueeze(dim=1), states_pred[:,:-1, :]], dim=1)
+                yt_ht_for_state_transform = states_last_step[..., :-2]
+                cum_t_for_state_transform = states_last_step[..., -2:-1] + dt
+                s_for_state_transform = states_last_step[..., -1:]
 
-            # The model determines the dfa states at time t by itself based on h(t-1), state(t-1), x(t).
-            #时间预测状态
-            states_last_step = torch.cat([state0.unsqueeze(dim=1), states_pred[:,:-1, :]], dim=1)
-            yt_ht_for_state_transform = states_last_step[..., :-2]
-            cum_t_for_state_transform = states_last_step[..., -2:-1] + dt
-            s_for_state_transform = states_last_step[..., -1:]
-
-            s_cum_t_for_state_transform = torch.sigmoid(cum_t_for_state_transform)
-            all_dfa_states_tag, all_dfa_states_prob, extra_info = self.model.states_classification(
-                torch.cat([
-                    yt_ht_for_state_transform,
-                    cum_t_for_state_transform,
-                    s_for_state_transform
-                ], dim=-1),
-                inputs=X,t=s_cum_t_for_state_transform
-            )
-
-            states_label = s
-            if 'predicted_stop_cum_time' in extra_info.keys():
-                stop_time_label = torch.zeros_like(extra_info['real_cum_time']) * float('nan')
-                stop_time_label_tmp = torch.zeros_like(stop_time_label[:,0]) * float('nan') # make a nan Tensor with shape (bs, 1)
-                for l in reversed(range(stop_time_label.size()[1])):
-                    updated_place = (states_label[:, l] != s_for_state_transform[:, l]).squeeze(dim=1)
-                    if torch.any(updated_place):
-                        stop_time_label_tmp[updated_place] = extra_info['real_cum_time'][updated_place, l]
-                        stop_time_label[:, l] = stop_time_label_tmp.detach().clone()
-
-                not_null_indices = ~torch.logical_or(
-                    torch.isnan(stop_time_label),
-                    torch.isnan(extra_info['predicted_stop_cum_time']),
+                s_cum_t_for_state_transform = torch.sigmoid(cum_t_for_state_transform)
+                all_dfa_states_tag, all_dfa_states_prob, extra_info = self.model.states_classification(
+                    torch.cat([
+                        yt_ht_for_state_transform,
+                        cum_t_for_state_transform,
+                        s_for_state_transform
+                    ], dim=-1),
+                    inputs=X,t=s_cum_t_for_state_transform
                 )
-                loss_classification = torch.nn.functional.mse_loss(
-                    stop_time_label[not_null_indices],
-                    extra_info['predicted_stop_cum_time'][not_null_indices]
-                )
-                # for state_index in range(6):
-                #     print('state : %d, mean of label %.2f, mean of prediction %.2f' % (state_index, float(
-                #         stop_time_label[not_null_indices][s_for_state_transform[not_null_indices] == state_index].mean()
-                #     ), float(
-                #         extra_info['predicted_stop_cum_time'][not_null_indices][
-                #             s_for_state_transform[not_null_indices] == state_index
-                #         ].mean()
-                #     )))
 
+                states_label = s
+                if 'predicted_stop_cum_time' in extra_info.keys():
+                    stop_time_label = torch.zeros_like(extra_info['real_cum_time']) * float('nan')
+                    stop_time_label_tmp = torch.zeros_like(stop_time_label[:,0]) * float('nan') # make a nan Tensor with shape (bs, 1)
+                    for l in reversed(range(stop_time_label.size()[1])):
+                        updated_place = (states_label[:, l] != s_for_state_transform[:, l]).squeeze(dim=1)
+                        if torch.any(updated_place):
+                            stop_time_label_tmp[updated_place] = extra_info['real_cum_time'][updated_place, l]
+                            stop_time_label[:, l] = stop_time_label_tmp.detach().clone()
+
+                    not_null_indices = ~torch.logical_or(
+                        torch.isnan(stop_time_label),
+                        torch.isnan(extra_info['predicted_stop_cum_time']),
+                    )
+                    loss_classification = torch.nn.functional.mse_loss(
+                        stop_time_label[not_null_indices],
+                        extra_info['predicted_stop_cum_time'][not_null_indices]
+                    )
+                    # for state_index in range(6):
+                    #     print('state : %d, mean of label %.2f, mean of prediction %.2f' % (state_index, float(
+                    #         stop_time_label[not_null_indices][s_for_state_transform[not_null_indices] == state_index].mean()
+                    #     ), float(
+                    #         extra_info['predicted_stop_cum_time'][not_null_indices][
+                    #             s_for_state_transform[not_null_indices] == state_index
+                    #         ].mean()
+                    #     )))
+
+                else:
+                    #自动状态转换相关
+                    loss_classification = self.class_criterion(
+                        all_dfa_states_prob.reshape(-1, all_dfa_states_prob.shape[-1]).contiguous(),
+                        states_label.reshape(-1).contiguous(),
+                    )
+
+                dfa_states_classifications_pred_all.append(all_dfa_states_tag.reshape(-1).detach().cpu())
+                dfa_states_classifications_label_all.append(states_label.reshape(-1).detach().cpu())
+            if self.mymodel != 'one':
+                loss = loss_classification + loss_pred
             else:
-                #自动状态转换相关
-                loss_classification = self.class_criterion(
-                    all_dfa_states_prob.reshape(-1, all_dfa_states_prob.shape[-1]).contiguous(),
-                    states_label.reshape(-1).contiguous(),
-                )
-
-            dfa_states_classifications_pred_all.append(all_dfa_states_tag.reshape(-1).detach().cpu())
-            dfa_states_classifications_label_all.append(states_label.reshape(-1).detach().cpu())
-
-            loss = loss_classification + loss_pred
+                loss = loss_pred
 
             with tr('backward'):
                 loss.backward() #反向传播
@@ -271,14 +269,18 @@ class EpochTrainer(object):
             self.optimizer.step()
 
             epoch_loss += loss.item() * bs #梯度下降
-            epoch_loss_classification += loss_classification.item() * bs
-            epoch_loss_pred += loss_pred.item() * bs
+            #epoch_loss_pred += loss_pred.item() * bs
            # epoch_loss_power += loss_power.item() *bs
-
-            self.logging('Epoch {}, iters {}-{}, train_size {} ,loss {:.4f}, loss_pred {:.4f}, loss_class {:.4f},time {}'.format(
-                epoch, i+1, int(np.ceil((len(train_inds)-1) / self.batch_size)), bs , float(loss.item()),
-                float(loss_pred.item()), float(loss_classification.item()), tr
-            ))
+            if self.mymodel == 'one':
+                self.logging('Epoch {}, iters {}-{}, train_size {} ,loss {:.4f}, loss_pred {:.4f},time {}'.format(
+                    epoch, i+1, int(np.ceil((len(train_inds)-1) / self.batch_size)), bs , float(loss.item()),
+                    float(loss_pred.item()), tr
+                ))
+            else:
+                self.logging('Epoch {}, iters {}-{}, train_size {} ,loss {:.4f}, loss_pred {:.4f}, loss_class {:.4f},time {}'.format(
+                    epoch, i+1, int(np.ceil((len(train_inds)-1) / self.batch_size)), bs , float(loss.item()),
+                    float(loss_pred.item()), float(loss_classification.item()), tr
+                ))
 
             # for i in range(int(np.ceil((len(self.train_inds)-1) / self.batch_size))):
             if self.debug and i>=1:

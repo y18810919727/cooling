@@ -216,6 +216,24 @@ def interpolate_tensors_with_nan(tensors):
     return tensors_nonan
 
 
+def add_state_label_one(df):
+    def is_nan(x):
+        return x != x
+    pcooling, power_cooling, Ti = df['Pcooling'], df['Power cooling'], df['Ti']
+    states = []
+    cur_state = 0
+    for item, (cooling, power, ti) in enumerate(zip(pcooling, power_cooling, Ti)):
+        nxt_i = min(item + 1, len(df) - 1)
+        nc, np, nti = pcooling[nxt_i], power_cooling[nxt_i], Ti[nxt_i]
+        if is_nan(cooling) or is_nan(power):
+            states.append(0)
+            continue
+        states.append(0)
+    ndf = df.copy(deep=True)
+    ndf['states'] = states
+    return ndf
+
+
 def add_state_label(df):
     def is_nan(x):
         return x != x
@@ -258,6 +276,24 @@ def get_Dataset(path):
     df = process_dataset(df)
     return df[['Pserver', 'Tr']], df[['Ti', 'Pcooling', 'Power cooling']], df[['time']], df[['states']]
 
+def get_Dataset_one(path):
+    df = pd.read_csv(path)
+    df = process_dataset_one(df)
+    return df[['Pserver', 'Tr']], df[['Ti', 'Pcooling', 'Power cooling']], df[['time']], df[['states']]
+
+def process_dataset_one(df):
+
+    df = add_state_label_one(df)
+    from datetime import datetime
+    beg_time_str = df['Time'].iloc[0] #取第0行数据
+    beg_time = datetime.strptime(beg_time_str[:-3]+beg_time_str[-2:], '%Y-%m-%dT%H:%M:%S%z')
+    df['time'] = df['Time'].apply(  #按照时间按0.1每步化成序列
+        lambda time_str: (datetime.strptime(time_str[:-3]+time_str[-2:], '%Y-%m-%dT%H:%M:%S%z')-beg_time
+                          ).total_seconds()/10
+    )
+    df['delta'] = df['time'][1:] - df['time'][:-1]   #为啥按索引对齐运算，以至于结果都等于0
+    df.interpolate(axis=0, method='linear', limit_direction='both', inplace=True)  #按列线性插值
+    return df
 
 def process_dataset(df):
 
@@ -397,6 +433,37 @@ def visualize_prediction_compare(Y_label, Y_pred, s_test, pserver,base_dir, seg_
             plt.xlabel('indexes')
             plt.ylabel(y_name)
             plt.legend()
+
+        plt.savefig(os.path.join(
+            base_dir, dir_name, '%i-%i-%i.png' % (ID, begin, begin + seg_length)
+        ))
+        plt.close()
+
+def visualize_prediction_power(Y_label, Y_pred, s_test, pserver,base_dir, seg_length=500, dir_name='visualizations'):
+    assert len(Y_pred) == len(Y_label)
+    if not os.path.exists(os.path.join(base_dir, dir_name)):
+        os.mkdir(os.path.join(base_dir, dir_name))
+    max_state = int(np.max(s_test))
+    ID = 0
+    for begin in range(0, len(Y_pred), seg_length):
+        ID += 1
+        plt.figure(figsize=(8, 4))
+        y_label_seg = Y_label[begin:min(begin + seg_length, len(Y_label))]
+        y_pred_seg = Y_pred[begin:min(begin + seg_length, len(Y_pred))]
+        s_test_seg = s_test[begin:min(begin + seg_length, len(Y_pred))]
+        #         scatter = plt.scatter(np.arange(begin, begin+len(tdf)), tdf['Power cooling'], c=tdf['states'], s=10)
+        X = np.arange(begin, begin + len(y_label_seg))
+        outputs_names = ['Ti', 'Pcooling', 'Power cooling']
+        classes = ['unknown', 'closed', 'start-1', 'start-2', 'cooling']
+        plt.subplot(1, 1, 1)
+        y_label = y_label_seg[:, 2]
+        y_pred = y_pred_seg[:, 2]
+        for state in range(max_state+1):
+            indices = (s_test_seg.squeeze(axis=-1) == state)
+            scatter = plt.scatter(X[indices], y_pred[indices], label='pred-'+classes[state], s=5, marker='o')
+        plt.xlabel('indexes')
+        plt.ylabel(outputs_names[2])
+        plt.legend()
 
         plt.savefig(os.path.join(
             base_dir, dir_name, '%i-%i-%i.png' % (ID, begin, begin + seg_length)

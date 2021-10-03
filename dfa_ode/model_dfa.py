@@ -13,17 +13,17 @@ from dfa_ode.odes_stationary import DFA_ODENets
 
 # class CDECell(nn.Module):
 #
-#     def __init__(self, k_in, k_state, num_layers, hidden_size=32):
+#     def __init__(self, k_in, k_h, num_layers, hidden_size=32):
 #         super().__init__()
 #         self.k_in = k_in
-#         self.k_state = k_state
+#         self.k_h = k_h
 #
 #         layer_sizes = [k_in] + [hidden_size] * num_layers
-#         self.fuc = get_mlp_network(layer_sizes, k_state * k_in)
+#         self.fuc = get_mlp_network(layer_sizes, k_h * k_in)
 #
 #     def forward(self, ht, xt_dt):
 #         vec = self.fuc(ht)
-#         vec = vec.reshape(-1, self.k_state, self.k_in)
+#         vec = vec.reshape(-1, self.k_h, self.k_in)
 #         return (vec @ xt_dt.unsqueeze(dim=-1)).squeeze(-1)
 
 
@@ -31,7 +31,7 @@ from dfa_ode.odes_stationary import DFA_ODENets
 
 class DFA_MIMO(nn.Module):
 
-    def __init__(self, ode_nums, layers, k_in, k_out, k_state, y_mean, y_std, odes_para,
+    def __init__(self, ode_nums, layers, k_in, k_out, k_h, y_mean, y_std, odes_para,
                  ode_2order=False, transformations=None, state_transformation_predictor=None, Ly_share=False,
                  dropout=0., cell_type='merge'):
         # potential kwargs: meandt, train_scheme, eval_scheme
@@ -39,28 +39,28 @@ class DFA_MIMO(nn.Module):
         super().__init__()
         self.k_in = k_in
         self.k_out = k_out
-        self.k_state = k_state
+        self.k_h = k_h
         self.dropout = dropout
         self.criterion = MSELoss_nan()
         #self.criterion = nn.SmoothL1Loss()  # huber loss
         # self.interpol = interpol
+        self.cell_type = cell_type
+        # self.cell = cell_factory(k_in, k_out, k_h, dropout=dropout, **kwargs)
 
-        # self.cell = cell_factory(k_in, k_out, k_state, dropout=dropout, **kwargs)
+        self.expand_input = nn.Sequential(nn.Linear(k_in, k_h), nn.Tanh())
+        self.expand_input_out = nn.Sequential(nn.Linear(k_in + k_out, k_h), nn.Tanh())
 
-        self.expand_input = nn.Sequential(nn.Linear(k_in, k_state), nn.Tanh())
-        self.expand_input_out = nn.Sequential(nn.Linear(k_in + k_out, k_state), nn.Tanh())
-
-        # self.state0 = nn.Parameter(torch.zeros(k_state,), requires_grad=True)  # trainable initial state
-        self.dfa_odes_forward = DFA_ODENets(ode_nums, layers, k_in, k_out, k_state, y_mean, y_std,#前项预测，输入输入量做预测
+        # self.state0 = nn.Parameter(torch.zeros(k_h,), requires_grad=True)  # trainable initial state
+        self.dfa_odes_forward = DFA_ODENets(ode_nums, layers, k_in, k_out, k_h, y_mean, y_std,#前项预测，输入输入量做预测
                                                   odes_para=odes_para, ode_2order=ode_2order,
                                                   state_transformation_predictor=state_transformation_predictor,
                                                   transformations_rules=transformations, cell_type=cell_type,
                                                   Ly_share=Ly_share)
-        self.dfa_odes_posterior = DFA_ODENets(ode_nums, layers, k_in, k_out, k_state, y_mean, y_std,#后验编码，输入输出量做编码
+        self.dfa_odes_posterior = DFA_ODENets(ode_nums, layers, k_in, k_out, k_h, y_mean, y_std,#后验编码，输入输出量做编码
                                                    odes_para=odes_para, ode_2order=ode_2order,
                                                     cell_type=cell_type,
                                                     Ly_share=Ly_share)
-        #self.register_buffer('state0', torch.zeros(k_state, ))  # fixed zero initial state
+        #self.register_buffer('state0', torch.zeros(k_h, ))  # fixed zero initial state
 
     def states_classification(self, states, inputs,t):
         reshape = False
@@ -71,8 +71,12 @@ class DFA_MIMO(nn.Module):
             states = states.reshape(-1, states.shape[-1]).contiguous()
             inputs = inputs.reshape(-1, inputs.shape[-1]).contiguous()
             t = t.reshape(-1, t.shape[-1]).contiguous()
-        xt = torch.cat([t,inputs, self.expand_input(inputs)], dim=-1)
-        new_s, new_s_prob, extra_info = self.dfa_odes_forward.state_transform(states, xt,inputs )
+        if self.cell_type == 'merge':
+            xt = torch.cat([t,inputs, self.expand_input(inputs)], dim=-1)
+        else:
+            xt = torch.cat([inputs, self.expand_input(inputs)], dim=-1)
+
+        new_s, new_s_prob, extra_info = self.dfa_odes_forward.state_transform(states, xt,inputs)
         if reshape:
             new_s_prob = new_s_prob.reshape(bs, l, -1)
             new_s = new_s.reshape(bs, l, -1)
@@ -99,13 +103,13 @@ class DFA_MIMO(nn.Module):
     def model_call(self, model, expand_cell, in_x,inputs , state0=None, dfa_states=None, dt=None, **kwargs):
         """
         :param model: dfa_odes
-        :param expand_cell: The model expanding inputs with size(..., k_in) to high-level feature (..., k_state)
+        :param expand_cell: The model expanding inputs with size(..., k_in) to high-level feature (..., k_h)
         :param inputs:  (batch_size, seq_len, k_in)
         :param state0: The  initial state of ode nets
         :param dfa_states: Given dfa states in each position
         :param dt:  (batch_size, seq_len, 1)
         :param kwargs:
-        :return: outputs (bs, len, k_out), states (bs, len, k_state)
+        :return: outputs (bs, len, k_out), states (bs, len, k_h)
         """
         # assert dfa_states is not None
         # state : [ht, cum_t, dfa_state]

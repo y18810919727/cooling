@@ -13,6 +13,8 @@ parser.add_argument("--bptt", type=int, default=800, help="bptt")
 parser.add_argument("--powertime", type=int, default=1800, help="powertime")
 parser.add_argument("--dev_epoch", type=str, default=80, help="experiment logging folder")
 
+parser.add_argument("--test", action="store_true", help="")
+parser.add_argument("--dev", action="store_true", help="")
 
 def prediction_error(truth, prediction):
     length = min(truth.shape[0], prediction.shape[0])
@@ -48,14 +50,21 @@ def rrse(truth, prediction):
     return np.mean(results)
 
 
-
+'''
+用来处理保存的数据
+1. 测试集曲线对比图
+2. 测试集功耗误差对比图，从5分钟到120分钟
+3. 测试机的功耗误差对比，不同数据集的图表
+4. 测试集的所有数据的误差图
+5. 验证集的rrse汇总日志，目前要给定epoch
+'''
 
 if __name__ == '__main__':
 
     paras = parser.parse_args()
     paras.save = os.path.join('../results', paras.save)  # 路径拼接，改变paras.save为'results/tmp'
     # 数据集['Data_train_1_7_1','Data_train_1_8k','Data_train_3_8k','Data_train_4_2k','Data_validate']
-    datasets=['P-1.7k','P-3.8K','P-4.2k','P-6.3k']
+    datasets=['P-1.7k','P-3.8k','P-4.2k','P-6.3k']
     all_sqe_nums = {}
     len_sqe = []
     result_path = os.path.join(paras.save, 'predict_result')
@@ -72,64 +81,76 @@ if __name__ == '__main__':
     log_file = os.path.join(dev_path, 'rrse.txt')
     logging = SimpleLogger(log_file)  # log to file
     all_power_error = []
-    for everdata in datasets:
+    if paras.test:
+        for everdata in datasets:
 
-        #测试集
-        test_path = os.path.join(result_path, 'test/compare_img')
-        if not os.path.exists(test_path):
-            os.mkdir(test_path)
-        filename = "predict_result/test/datafigs_"+everdata+".pkl"
-        file=open(os.path.join(paras.save, filename),"rb")
-        data=pickle.load(file)
-        X_mean = data['X_mean']
-        X_std = data['X_std']
-        Y_mean = data['Y_mean']
-        Y_std = data['Y_std']
-        Ytest = data['y_target_test']
-        y_pred_test = data['y_pred_test']
-        Xtest = data['x_test']
+            #测试集
+            test_path = os.path.join(result_path, 'test/compare_img')
+            if not os.path.exists(test_path):
+                os.mkdir(test_path)
+            filename = "predict_result/test/datafigs_"+everdata+".pkl"
+            file=open(os.path.join(paras.save, filename),"rb")
+            data=pickle.load(file)
+            X_mean = data['X_mean']
+            X_std = data['X_std']
+            Y_mean = data['Y_mean']
+            Y_std = data['Y_std']
+            Ytest = data['y_target_test']
+            y_pred_test = data['y_pred_test']
+            Xtest = data['x_test']
 
-        ttest = data['t_test']
-        dttest = np.append(ttest[1:] - ttest[:-1], ttest[1] - ttest[0]).reshape(-1, 1)
-        test_dfa_state_pred_array = data['test_dfa_state_pred_array']
-        # visualize_prediction_compare( Ytest[paras.bptt:] * Y_std + Y_mean, y_pred_test * Y_std + Y_mean, test_dfa_state_pred_array,Xtest[paras.bptt:,0]* X_std[0] + X_mean[0],
-        #                             test_path,
-        #                             seg_length=2000, dir_name='%s' %(everdata))# 模型自己预测的
+            ttest = data['t_test']
+            dttest = np.append(ttest[1:] - ttest[:-1], ttest[1] - ttest[0]).reshape(-1, 1)
+            test_dfa_state_pred_array = data['test_dfa_state_pred_array']
+            error_all_path = os.path.join(result_path, 'test/error_all')
+            if not os.path.exists(error_all_path):
+                os.mkdir(error_all_path)
+            show_data(ttest, Ytest, y_pred_test, error_all_path,
+                      'error_all', everdata,
+                      msg='test error results(%s)' % (everdata))
 
-        # integral, error = calculation_ms(Ytest[paras.bptt:, 2] * Y_std[2] + Y_mean[2],
-        #                              y_pred_test[:, 2] * Y_std[2] + Y_mean[2], dttest, paras.powertime)
-        # if (int(len(integral[0])) != 0):
-        #     draw_table(everdata, integral, error,  paras.powertime, test_path,dir_name='%s' %(everdata))
-        ever_power_error = []
-        for i in range(5,125,5):
+            visualize_prediction_compare( Ytest[paras.bptt:] * Y_std + Y_mean, y_pred_test * Y_std + Y_mean, test_dfa_state_pred_array,Xtest[paras.bptt:,0]* X_std[0] + X_mean[0],
+                                        test_path,
+                                        seg_length=2000, dir_name='%s' %(everdata))# 模型自己预测的
+
             integral, error = calculation_ms(Ytest[paras.bptt:, 2] * Y_std[2] + Y_mean[2],
-                           y_pred_test[:, 2] * Y_std[2] + Y_mean[2], dttest, i*60)
-            ever_power_error.append(error[0][1])
-        all_power_error.append(ever_power_error)
-        #print(data)
-        file.close()
-    draw_power_error(all_power_error,datasets,dir_name=test_path)
+                                         y_pred_test[:, 2] * Y_std[2] + Y_mean[2], dttest, paras.powertime)
+            if (int(len(integral[0])) != 0):
+                draw_table(everdata, integral, error,  paras.powertime, test_path,dir_name='%s' %(everdata))
 
 
-        # 验证集
-        # filename = "predict_result/dev/epoch_%s/datafigs_"%(paras.dev_epoch)+everdata+".pkl"
-        # file=open(os.path.join(paras.save, filename),"rb")
-        # data=pickle.load(file)
-        # X_mean = data['X_mean']
-        # X_std = data['X_std']
-        # Y_mean = data['Y_mean']
-        # Y_std = data['Y_std']
-        # Ytest = data['y_target_dev']
-        # y_pred_test = data['y_pred_dev']
-        # Xtest = data['x_dev']
-        #
-        # ttest = data['t_tdev']
-        # dttest = np.append(ttest[1:] - ttest[:-1], ttest[1] - ttest[0]).reshape(-1, 1)
-        # test_dfa_state_pred_array = data['sdev']
-        #
-        # error_test = prediction_error(Ytest[paras.bptt:], y_pred_test)
-        # logging('dataset: %s, Ti: %.2f,Pcooling: %.2f, Pserver: %.2f, ' % (everdata,error_test[0], error_test[1], error_test[2]))
-        # file.close()
+            ever_power_error = []
+            for i in range(5,125,5):
+                integral, error = calculation_ms(Ytest[paras.bptt:, 2] * Y_std[2] + Y_mean[2],
+                               y_pred_test[:, 2] * Y_std[2] + Y_mean[2], dttest, i*60)
+                ever_power_error.append(error[0][1])
+            all_power_error.append(ever_power_error)
+            #print(data)
+            file.close()
+
+        draw_power_error(all_power_error,datasets,dir_name=test_path)
+
+    if paras.dev:
+        for everdata in datasets:
+            #验证集
+            filename = "predict_result/dev/epoch_%s/datafigs_"%(paras.dev_epoch)+everdata+".pkl"
+            file=open(os.path.join(paras.save, filename),"rb")
+            data=pickle.load(file)
+            X_mean = data['X_mean']
+            X_std = data['X_std']
+            Y_mean = data['Y_mean']
+            Y_std = data['Y_std']
+            Ytest = data['y_target_dev']
+            y_pred_test = data['y_pred_dev']
+            Xtest = data['x_dev']
+
+            ttest = data['t_tdev']
+            dttest = np.append(ttest[1:] - ttest[:-1], ttest[1] - ttest[0]).reshape(-1, 1)
+            test_dfa_state_pred_array = data['sdev']
+
+            error_test = prediction_error(Ytest[paras.bptt:], y_pred_test)
+            logging('dataset: %s, Ti: %.2f,Pcooling: %.2f, Pserver: %.2f, ' % (everdata,error_test[0], error_test[1], error_test[2]))
+            file.close()
 
 
 

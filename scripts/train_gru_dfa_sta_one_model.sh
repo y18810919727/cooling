@@ -2,4 +2,4 @@
 
 cd ..
 
-CUDA_VISIBLE_DEVICES=3 python main.py --save 0928_one_model --model DFA --dfa_yaml one_model
+CUDA_VISIBLE_DEVICES=5 python main.py  --save 1003_one_model --model DFA --dfa_yaml one_model --mymodel one

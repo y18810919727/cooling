@@ -11,7 +11,7 @@ sys.path.append(parent)
 from dfa_ode.model_dfa import DFA_MIMO
 from dfa_ode.train import EpochTrainer
 from util import SimpleLogger, show_data, init_weights, array_operate_with_nan, get_Dataset, visualize_prediction, t2np, \
-    draw_table, draw_table_all, calculation_ms
+    draw_table, draw_table_all, calculation_ms,get_Dataset_one
 
 import pandas as pd
 
@@ -45,6 +45,7 @@ set up model
 """
 论文中的代码参数
 """
+
 parser.add_argument("--test", action="store_true", help="Testing model in para.save")
 parser.add_argument("--time_aware", type=str, default='variable', choices=['no', 'input', 'variable'], help=methods)
 parser.add_argument("--model", type=str, default='GRU', choices=['GRU', 'GRUinc', 'ARNN', 'ARNNinc', 'DFA'])
@@ -54,7 +55,7 @@ parser.add_argument("--interpol", type=str, default='constant', choices=['consta
 parser.add_argument("--missing", type=float, default=0.0, help="fraction of missing samples (0.0 or 0.5)")
 
 # model architecture
-parser.add_argument("--k_state", type=int, default=20, help="dimension of hidden state")
+parser.add_argument("--k_h", type=int, default=20, help="dimension of hidden state")
 
 # in case method == 'variable'
 RKchoices = ['Euler', 'Midpoint', 'Kutta3', 'RK4']
@@ -92,7 +93,7 @@ parser.add_argument("--debug", action="store_true", help="debug mode, for accele
 #数据集['Data_train_1_7_1','Data_train_1_8k','Data_train_3_8k','Data_train_4_2k','Data_validate']
 #files = ['P-1.7k.csv','P-1.85k.csv','P-3.8K.csv','P-4.2k.csv','P-6.3k.csv']
 parser.add_argument("--datasets", type=list, default=['P-1.7k','P-1.85k','P-3.8k','P-4.2k','P-6.3k'], help="datasets")
-parser.add_argument("--describe", type=str, default="新数据集,新状态,ode_rnn,再试一次", help="describe")
+parser.add_argument("--describe", type=str, default="allp_alld  ", help="describe")
 parser.add_argument("--mymodel", type=str, default='merge', choices=['merge', 'rnn', 'one'])
 
 paras = parser.parse_args()
@@ -173,11 +174,15 @@ datasets = paras.datasets        #datasets=['Data_train_1_7_1','Data_train_1_8k'
 all_sqe_nums = {}
 len_sqe = []
 if paras.debug: # Using short dataset for acceleration
-     Xtrain, Ytrain, ttrain, strain = [df.to_numpy(dtype=np.float32) for df in get_Dataset('./mydata2/train_P-1.7k.csv')]
-     Xdev, Ydev, tdev, sdev = [df.to_numpy(dtype=np.float32) for df in get_Dataset('./mydata2/P-1.7k.csv')]
-     len_sqe.append(0)
-     len_sqe.append(int(Xtrain.size / 2))
-     all_sqe_nums['train'] =len_sqe
+    if paras.mymodel == 'one':
+        Xtrain, Ytrain, ttrain, strain = [df.to_numpy(dtype=np.float32) for df in get_Dataset_one('./mydata2/train_P-1.7k.csv')]
+        Xdev, Ydev, tdev, sdev = [df.to_numpy(dtype=np.float32) for df in get_Dataset_one('./mydata2/P-1.7k.csv')]
+    else:
+        Xtrain, Ytrain, ttrain, strain = [df.to_numpy(dtype=np.float32) for df in get_Dataset('./mydata2/train_P-1.7k.csv')]
+        Xdev, Ydev, tdev, sdev = [df.to_numpy(dtype=np.float32) for df in get_Dataset('./mydata2/P-1.7k.csv')]
+    len_sqe.append(0)
+    len_sqe.append(int(Xtrain.size / 2))
+    all_sqe_nums['train'] =len_sqe
 
 else:
     Xtrain=[]
@@ -188,7 +193,10 @@ else:
     for everdata in datasets:
         len_sqe = []
         len_sqe.append(int(Xtrain.size/2))
-        X, Y, t, s = [df.to_numpy(dtype=np.float32) for df in get_Dataset('./mydata2/train_'+everdata+'.csv')]
+        if paras.mymodel == 'one':
+            X, Y, t, s = [df.to_numpy(dtype=np.float32) for df in get_Dataset_one('./mydata2/train_' + everdata + '.csv')]
+        else:
+            X, Y, t, s = [df.to_numpy(dtype=np.float32) for df in get_Dataset('./mydata2/train_'+everdata+'.csv')]
         Xtrain = np.append(Xtrain,X).reshape(-1, 2)
         Ytrain = np.append(Ytrain,Y).reshape(-1, 3)
         ttrain = np.append(ttrain,t).reshape(-1, 1)
@@ -285,11 +293,11 @@ if not paras.test:
     fs = open('./dfa_ode/transformations/{}.yaml'.format(paras.dfa_yaml), encoding='UTF-8', mode='r')
     dfa_setting = yaml.load(fs, Loader=yaml.FullLoader)
 
-    model = DFA_MIMO(dfa_setting['ode_nums'], 1, k_in, k_out, paras.k_state, y_mean=Y_mean, y_std=Y_std,
+    model = DFA_MIMO(dfa_setting['ode_nums'], 1, k_in, k_out, paras.k_h, y_mean=Y_mean, y_std=Y_std,
                      odes_para=dfa_setting['odes'],
                      ode_2order=dfa_setting['ode_2order'],
                      transformations=dfa_setting['transformations'],
-                     state_transformation_predictor=dfa_setting['predictors'], cell_type='merge',
+                     state_transformation_predictor=dfa_setting['predictors'], cell_type=paras.mymodel,
                      Ly_share=dfa_setting['Ly_share'])
 
     model.apply(init_weights)
@@ -315,7 +323,7 @@ optimizer = torch.optim.Adam(model.parameters(), lr=paras.lr, weight_decay=paras
 #构建训练器，把训练的代码封装成一个类
 trainer = EpochTrainer(model, optimizer, paras.epochs, Xtrain, Ytrain, strain, dttrain,
                        batch_size=paras.batch_size, gpu=GPU, bptt=paras.bptt,all_sqe_nums=all_sqe_nums, save_dir=paras.save,
-                       logging=logging, debug=paras.debug)  #dttrain ignored for all but 'variable' methods
+                       logging=logging, debug=paras.debug,mymodel = paras.mymodel)  #dttrain ignored for all but 'variable' methods
 t00 = time()
 #参数，每训练10轮做一次评估，
 best_dev_error = 1.e5
@@ -339,8 +347,21 @@ try:  # catch error and redirect to logger
                 error_dev_sum = 0
                 # corresponding test result:
                 for everdata in datasets:
-                    Xtrain, Ytrain, ttrain, strain = [df.to_numpy(dtype=np.float32) for df in get_Dataset('./mydata2/train_'+everdata+'.csv')]
-                    Xdev, Ydev, tdev, sdev = [df.to_numpy(dtype=np.float32) for df in get_Dataset('./mydata2/'+everdata+'.csv')]  #验证集也改为和测试集一样
+                    if paras.mymodel == 'one':
+                        X, Y, t, s = [df.to_numpy(dtype=np.float32) for df in
+                                      get_Dataset_one('./mydata2/train_' + everdata + '.csv')]
+                    else:
+                        X, Y, t, s = [df.to_numpy(dtype=np.float32) for df in
+                                      get_Dataset('./mydata2/train_' + everdata + '.csv')]
+                    if paras.mymodel == 'one':
+                        Xtrain, Ytrain, ttrain, strain = [df.to_numpy(dtype=np.float32) for df in get_Dataset_one('./mydata2/train_'+everdata+'.csv')]
+                        Xdev, Ydev, tdev, sdev = [df.to_numpy(dtype=np.float32) for df in get_Dataset_one('./mydata2/'+everdata+'.csv')]  #验证集也改为和测试集一样
+                    else:
+                        Xtrain, Ytrain, ttrain, strain = [df.to_numpy(dtype=np.float32) for df in
+                                                          get_Dataset('./mydata2/train_' + everdata + '.csv')]
+                        Xdev, Ydev, tdev, sdev = [df.to_numpy(dtype=np.float32) for df in
+                                                  get_Dataset('./mydata2/' + everdata + '.csv')]  # 验证集也改为和测试集一样
+
                     dttrain = np.append(ttrain[1:] - ttrain[:-1], ttrain[1] - ttrain[0]).reshape(-1,1)  # 化为1列,从1到最后减去从0到
                     dtdev = np.append(tdev[1:] - tdev[:-1], tdev[1] - tdev[0]).reshape(-1, 1)
                     Ytrain, Ydev = [(Y - Y_mean) / Y_std for Y in [Ytrain, Ydev]]  # 标准化处理
@@ -472,8 +493,13 @@ try:  # catch error and redirect to logger
                     error_test_sum = 0
 
                     for everdata in datasets:
-                        Xtest, Ytest, ttest, stest = [df.to_numpy(dtype=np.float32) for df in
-                                                  get_Dataset('./mydata2/'+everdata+'.csv')]
+
+                        if paras.mymodel == 'one':
+                            Xtest, Ytest, ttest, stest = [df.to_numpy(dtype=np.float32) for df in
+                                                  get_Dataset_one('./mydata2/'+everdata+'.csv')]
+                        else:
+                            Xtest, Ytest, ttest, stest = [df.to_numpy(dtype=np.float32) for df in
+                                                          get_Dataset('./mydata2/' + everdata + '.csv')]
                         dttest = np.append(ttest[1:] - ttest[:-1], ttest[1] - ttest[0]).reshape(-1, 1)
                         # Y_mean, Y_std = array_operate_with_nan(Ytest, np.mean), array_operate_with_nan(Ytest, np.std)  # 归一化
                         # X_mean, X_std = array_operate_with_nan(Xtest, np.mean), array_operate_with_nan(Xtest, np.std)

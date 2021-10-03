@@ -33,11 +33,11 @@ def xw_toExcel(data, fileName):  # xlsxwriter库储存数据到excel
     workbook.close()  # 关闭表
 
 
-def box_img(states,no,dataset):
+def box_img(states,no,all_states,dataset):
     figure, axes = plt.subplots()
     axes.set_xticklabels(dataset)
     axes.boxplot(states[no], patch_artist=False)  # 描点上色
-    plt.title('state%d'%(no))
+    plt.title(all_states[no-1])
     plt.xlabel('Pserver(w)')
     plt.ylabel('time(s)')
     axes.yaxis.grid(True)
@@ -147,8 +147,9 @@ if __name__ == '__main__':
     # probability_distribution(data=states[3], bins_interval=1,margin=0,no=3)
     # probability_distribution(data=states[4], bins_interval=1,margin=0,no=4)
     # #probability_distribution(data=states[5], bins_interval=1,margin=0,no=5)
+    all_states2=['on', 'off', 'start-1', 'start-2']
     for i in range(1, 5):
-        box_img(states,i,dataset)
+        box_img(states,i,all_states2,dataset)
 
 
 
