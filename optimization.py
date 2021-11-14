@@ -28,6 +28,7 @@ set up model
 
 
 parser.add_argument("--low", type=float, default=12, help='The temperature activating the work of cooling')
+parser.add_argument("--high", type=float, default=20, help='The temperature stopping the cooling system')
 parser.add_argument("--model", type=str, default='best_dev_model-Copy1')
 parser.add_argument("--interpol", type=str, default='constant', choices=['constant', 'linear'])
 parser.add_argument("--bptt", type=int, default=800, help="bptt")
@@ -48,7 +49,7 @@ if __name__ == '__main__':
     log_file_all = os.path.join(save_dir_img, 'all.txt' )
     logging_all = SimpleLogger(log_file_all)  # log to file
     # 导入入归一化值
-    filename = "./optimization/mean_std6.3.pkl"
+    filename = "./optimization/tu.pkl"
     file = open(filename, "rb")
     data = pickle.load(file)
     X_mean = data['X_mean']
@@ -96,23 +97,24 @@ if __name__ == '__main__':
             model = torch.load(os.path.join(paras.save_dir, 'best_dev_model.pt'),
                                map_location=device)  # load模型
             model.dfa_odes_forward.transforms = defaultdict(list)
-            #model.dfa_odes_forward.add_transform(1, 2, [[0, 'geq', paras.high]])
+            model.dfa_odes_forward.add_transform(1, 2, [[0, 'geq', paras.high]])
             model.dfa_odes_forward.add_transform(4, 1, [[0, 'leq',low]])
             Ytest_pred, test_state_pred = model.encoding_plus_predict(  # 模型预测
                 Xtest_tn, dttest_tn, Ytest_tn[:, :paras.bptt], stest_tn[:, :paras.bptt], paras.bptt, None)
             test_dfa_state_pred_array = model.select_dfa_states(
                 test_state_pred[0]).int().detach().cpu().numpy()  # 把状态也拿出来
 
-            visualize_prediction(
-                Ytest[paras.bptt:] * Y_std + Y_mean, t2np(Ytest_pred) * Y_std + Y_mean, test_dfa_state_pred_array,
-                Xtest[paras.bptt:, 0] * X_std[0] + X_mean[0],
-                save_dir,
-                seg_length=2000, dir_name='vis-%.1f' % (low))  # 模型自己预测的
-
-            # visualize_prediction_power(  # 可视化
+            # visualize_prediction(
             #     Ytest[paras.bptt:] * Y_std + Y_mean, t2np(Ytest_pred) * Y_std + Y_mean, test_dfa_state_pred_array,
-            #     Xtest[paras.bptt:, 0] * X_std[0] + X_mean[0],low ,save_dir,
-            #     seg_length=2000, dir_name='vis-%.1f' % (low))
+            #     Xtest[paras.bptt:, 0] * X_std[0] + X_mean[0],
+            #     save_dir,
+            #     seg_length=2000, dir_name='vis-%.1f' % (low))  # 模型自己预测的
+
+            visualize_prediction_power(  # 可视化
+                Ytest[paras.bptt:] * Y_std + Y_mean, t2np(Ytest_pred) * Y_std + Y_mean, test_dfa_state_pred_array,
+                Xtest[paras.bptt:, 0] * X_std[0] + X_mean[0],low
+                ,save_dir,
+                seg_length=1000, dir_name='vis-%.1f' % (low))
 
             predicted_power = (t2np(Ytest_pred) * Y_std + Y_mean)[..., -1].reshape(-1)  # 算power
             predicted_power[predicted_power < 0] = 0
@@ -150,21 +152,20 @@ if __name__ == '__main__':
         #
         # else:
 
-
-
-
     plt.title('all' + " - " + 'Power')
-    plt.figure()
-    color = ['blue','red','green','purple']
-    for i,sum_power in enumerate(sum_powers_all):
-        #plt.title('Compare the power consumption at different lower temperature limits', fontsize=20)
-        plt.plot(np.arange(Min, Max, step), sum_power,label = paras.datasets[i],color = color[i])
+    plt.figure(figsize=(9, 5))
+    color = ['blue', 'red', 'green', 'purple']
+    for i, sum_power in enumerate(sum_powers_all):
+        # plt.title('Compare the power consumption at different lower temperature limits', fontsize=20)
+        plt.plot(np.arange(Min, Max, step), sum_power, label=paras.datasets[i], color=color[i])
         min_idx = sum_power.index(min(sum_power))
-        plt.plot(Min+(min_idx*step), sum_power[min_idx], marker='x',color = color[i])
-        plt.legend(fontsize=15, loc = 1)
-    plt.xticks(fontsize=15)
-    plt.yticks(fontsize=15)
-    plt.xlabel('The set point of lower bound temperature(℃)',fontsize=15)
-    plt.ylabel('Power Consumption(kwh)',fontsize=15)
+        plt.plot(Min + (min_idx * step), sum_power[min_idx], marker='x', color=color[i])
+        plt.legend(fontsize=18)
+    plt.xticks(fontsize=19)
+    plt.yticks(fontsize=19)
+    plt.xlabel('$T_{low}(℃)$', fontsize=20)
+    plt.ylabel('Energy consumption(kwh)', fontsize=20)
+    plt.tight_layout()
     plt.savefig(os.path.join(save_dir_img, '%.1f-%.1f-%.1f.png' % (Min, Max, step)))
+    plt.savefig(os.path.join(save_dir_img, '%.1f-%.1f-%.1f.eps' % (Min, Max, step)), format="eps", dpi=600)
     plt.close()
