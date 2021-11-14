@@ -70,6 +70,8 @@ class ODEOneCell(nn.Module):
         self.name = name
         self.ode_2order = ode_2order
         y_type = [0 if x == 'd' else x for x in y_type]
+        y_type = [1 if x == 's' else x for x in y_type]
+        y_type = [2 if x == 'n' else x for x in y_type]
         self.y_type = y_type
         self.Ly = Ly
         if self.ode_2order:
@@ -183,8 +185,7 @@ class Predictor(nn.Module):
             nn.Linear(hidden, 1, bias=True),
         )
 
-    def forward(self, x_in ,ht, xt):
+    def forward(self, x_in ,ht):
         return self.net(
-            torch.cat([x_in,ht, xt], dim=-1)
+            torch.cat([x_in,ht], dim=-1)
         )
-

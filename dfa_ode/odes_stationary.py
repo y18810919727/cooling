@@ -54,7 +54,7 @@ class DFA_ODENets(nn.Module):
                 for kind, state in state_transformation_predictor:
                     if kind == 'predict':
                         self.state_transformation_predictor[str(state)] = Predictor(
-                            self.k_t+self.k_expand_in+self.k_in+self.k_h+self.k_t+self.k_s,
+                           self.k_t+self.k_in+self.k_expand_in+self.k_in+self.k_h,
                             22
                         )
                     elif kind == 'classify':
@@ -146,7 +146,7 @@ class DFA_ODENets(nn.Module):
             (min_values, max_values, s2)
         )
 
-    def state_transform(self, state, xt,x_in):
+    def state_transform(self, state, xt,x_in = None):
         """
 
         state the diffused states in ODEs  (batch_size, k_h+2)
@@ -171,7 +171,10 @@ class DFA_ODENets(nn.Module):
                     if 'predicted_stop_cum_time' not in extra_info.keys():
                         extra_info['predicted_stop_cum_time'] = torch.zeros_like(cum_t) * float('nan')
                         extra_info['real_cum_time'] = cum_t
-                    predicted_cum_t = predictor(x_in[chosen_indices],ht[chosen_indices], xt[chosen_indices]) #新加x为输入
+                    if x_in == None:#时间预测器中不加x
+                        predicted_cum_t = predictor(xt[chosen_indices],ht[chosen_indices]) #新加x为输入
+                    else:
+                        predicted_cum_t = predictor(xt[chosen_indices],torch.cat([ht[chosen_indices], x_in[chosen_indices]],dim=-1))  # 新加x为输入
                     indices_time_out = (predicted_cum_t.squeeze(dim=-1) <= cum_t[chosen_indices].squeeze(dim=-1))
                     indices_time_out = chosen_indices[indices_time_out]
 
@@ -293,22 +296,20 @@ class DFA_ODENets(nn.Module):
         if new_s is None and self.cell_type == 'merge':
             new_s, new_s_prob, _ = self.state_transform(
                 torch.cat([new_ht, cum_t, s], dim=-1),
-                xt_t, x_in
+                xt_t,x_in=x_in
             )
-            updated_indices = (s.squeeze(dim=-1) != new_s.squeeze(dim=-1))   #更新下标，如果状态转移，那么那个状态的下标页转为0
-            new_cum_t[updated_indices] = 0
 
         if new_s is None and  self.cell_type == 'rnn':
             new_s, new_s_prob, _ = self.state_transform(
                 torch.cat([new_ht, cum_t, s], dim=-1),
                 xt,x_in=x_in
             )
-            updated_indices = (s.squeeze(dim=-1) != new_s.squeeze(dim=-1))   #更新下标，如果状态转移，那么那个状态的下标页转为0
-            new_cum_t[updated_indices] = 0
 
         if new_s is None and self.cell_type == 'one':
             new_s = torch.tensor([[0]], dtype=torch.int).cuda()
 
+        updated_indices = (s.squeeze(dim=-1) != new_s.squeeze(dim=-1))  # 更新下标，如果状态转移，那么那个状态的下标页转为0
+        new_cum_t[updated_indices] = 0
 
         return self.decode_y(new_ht), torch.cat([new_ht, new_cum_t, new_s.float()], dim=-1)
 

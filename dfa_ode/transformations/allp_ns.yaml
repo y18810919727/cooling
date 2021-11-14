@@ -22,7 +22,7 @@ odes:
 
 - name: closed
   cell: gru
-  y_type: ['s', 's', 's']
+  y_type: ['n', 's', 's']
 
 - name: start-1
   cell: gru
@@ -34,6 +34,5 @@ odes:
 
 - name: cooling
   cell: gru
-  y_type: ['s', 's', 's']
-
+  y_type: ['n', 's', 's']
 

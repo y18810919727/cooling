@@ -2,5 +2,4 @@
 
 cd ..
 
-CUDA_VISIBLE_DEVICES=2 python main.py --save  0927_wendu_ns_new_trans_newdata_state   --model DFA --dfa_yaml dfa_ns
-
+CUDA_VISIBLE_DEVICES=4 python main.py --save  1022_wendu_xin_ns4   --model DFA --dfa_yaml dfa_ns

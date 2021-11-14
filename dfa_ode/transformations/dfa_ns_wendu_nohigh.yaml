@@ -5,7 +5,7 @@ transformations:   #规则转移
   - from: 4
     to: 1
     rules:
-    - [0 ,leq, 12]
+    - [0 ,leq, 12.1]
 predictors:
   - ['predict', 1]   #2和3需要预测期
   - ['predict', 2]   #2和3需要预测期
@@ -24,7 +24,7 @@ odes:
 
 - name: closed
   cell: gru
-  y_type: ['n', 's', 's']
+  y_type: ['s', 's', 's']
 
 - name: start-1
   cell: gru
@@ -37,3 +37,4 @@ odes:
 - name: cooling
   cell: gru
   y_type: ['n', 's', 's']
+

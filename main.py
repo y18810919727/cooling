@@ -92,8 +92,8 @@ parser.add_argument("--debug", action="store_true", help="debug mode, for accele
 
 #数据集['Data_train_1_7_1','Data_train_1_8k','Data_train_3_8k','Data_train_4_2k','Data_validate']
 #files = ['P-1.7k.csv','P-1.85k.csv','P-3.8K.csv','P-4.2k.csv','P-6.3k.csv']
-parser.add_argument("--datasets", type=list, default=['P-1.7k','P-1.85k','P-3.8k','P-4.2k','P-6.3k'], help="datasets")
-parser.add_argument("--describe", type=str, default="allp_alld  ", help="describe")
+parser.add_argument("--datasets", type=list, default=['P-1.7k','P-3.8k','P-6.3k'], help="datasets")
+parser.add_argument("--describe", type=str, default="三个数据集,新的打标签方式,ns", help="describe")
 parser.add_argument("--mymodel", type=str, default='merge', choices=['merge', 'rnn', 'one'])
 
 paras = parser.parse_args()
@@ -427,7 +427,7 @@ try:  # catch error and redirect to logger
                     # log_value('train/mse', mse_train, epoch)
                     # log_value('train/error', error_train, epoch)
                     # log_value('dev/loss', mse_dev, epoch)
-                    # log_value('dev/error', error_dev, epoch)
+                    #log_value('dev/error', error_dev, epoch)
                     # current_trainresults_path = os.path.join(paras.save, 'current_trainresults')
                     # if not os.path.exists(current_trainresults_path):
                     #     os.mkdir(current_trainresults_path)
@@ -440,8 +440,11 @@ try:  # catch error and redirect to logger
                     # if not os.path.exists(best_dev_devresults_path):
                     #     os.mkdir(best_dev_devresults_path)
 
+                    logging(
+                        'epoch %04d |%s| rrse %d '%(epoch, everdata,error_dev))
+
                     # logging('epoch %04d |%s| loss %.3f (train), %.3f (dev) | error %.3f (train), %.3f (dev) | tt %.2fmin'%
-                    #         (epoch,everdata ,mse_train, mse_dev, error_train, error_dev, (time()-t00)/60.))
+                    #          (epoch,everdata ,mse_train, mse_dev, error_train, error_dev, (time()-t00)/60.))
 
                     # show_data(ttrain[paras.bptt:], Ytrain[paras.bptt:], t2np(Ytrain_pred), current_trainresults_path, 'current_trainresults',everdata,
                     #                msg='train results (train error %.3f) at iter %d-%s' % (error_train, epoch,everdata))
@@ -467,15 +470,15 @@ try:  # catch error and redirect to logger
                     dev_result = os.path.join(predict_result, 'dev/')
                     if not os.path.exists(dev_result):
                         os.mkdir(dev_result)
-                    dev_result = os.path.join(dev_result, 'epoch_%s'%(str(epoch)))
-                    if not os.path.exists(dev_result):
-                        os.mkdir(dev_result)
+                    dev_result2 = os.path.join(dev_result, 'epoch_%s'%(str(epoch)))
+                    if not os.path.exists(dev_result2):
+                        os.mkdir(dev_result2)
                     pickle.dump(
                         {'t_tdev': tdev, 'y_target_dev': Ydev, 'y_pred_dev': t2np(Ydev_pred), 'x_dev': Xdev,
                          'sdev': sdev[paras.bptt:],
                          'Y_mean': Y_mean, 'Y_std': Y_std, 'X_mean': X_mean, 'X_std': X_std},
-                        open(os.path.join(dev_result, 'datafigs_{}.pkl'.format(everdata)), 'wb'))
-
+                        open(os.path.join(dev_result2, 'datafigs_{}.pkl'.format(everdata)), 'wb'))
+                logging('epoch %04d| rrse_all %d ' % (epoch, error_dev_sum))
                     # make figure of best model on train, dev and test set for debugging
                     # show_data(tdev, Ydev, t2np(Ydev_pred), best_dev_devresults_path, 'best_dev_devresults',everdata,
                     #           msg='dev results-%s' % (error_dev, epoch,everdata))
@@ -551,7 +554,7 @@ try:  # catch error and redirect to logger
 
                         # save model
                         #torch.save(model.state_dict(), os.path.join(paras.save, 'best_dev_model_state_dict.pt'))
-                        torch.save(model, os.path.join(paras.save, 'best_dev_model.pt'))  #存最好的模型
+                        torch.save(model, os.path.join(paras.save, 'best_dev_model_{}.pt'.format(epoch)))  #存最好的模型
                         predict_result = os.path.join(paras.save, 'predict_result/')
                         if not os.path.exists(predict_result):
                             os.mkdir(predict_result)
@@ -562,6 +565,10 @@ try:  # catch error and redirect to logger
                         pickle.dump({'t_test': ttest, 'y_target_test': Ytest, 'y_pred_test': t2np(Ytest_pred),'x_test':Xtest,'test_dfa_state_pred_array':test_dfa_state_pred_array,
                                      'Y_mean':Y_mean,'Y_std':Y_std,'X_mean':X_mean,'X_std':X_std},
                                     open(os.path.join(predict_result, 'datafigs_{}.pkl'.format(everdata)), 'wb'))
+
+                        dev_result_best = os.path.join(dev_result, 'epoch_%s' % (str(best_dev_epoch)))
+                        file = os.path.join(dev_result_best, 'datafigs_{}.pkl'.format(everdata))
+                        shutil.copy(file, dev_result)
 
                     error_all=[error_all_mae,error_all_mape]
                     draw_table_all(datasets, error_all , os.path.join(paras.save, 'predict_seq'))

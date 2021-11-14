@@ -138,21 +138,24 @@ def show_data(t, target, pred, folder, tag ,everdata,msg=''):
     t, target, pred = [x[-length:] for x in [t, target, pred]]
 
     plt.clf()
-    plt.figure(1)
-    maxv = np.max(target)
-    minv = np.min(target)
-    view = maxv - minv
-
+    plt.figure(figsize=(10, 9))
+    outputs_names = ['Ti', 'Pcooling', 'Power cooling']
+    labels = ['truth','one-ode']
     # linear
     n = target.shape[1]
     for i in range(n):
-        ax_i = plt.subplot(n, 1, i+1)
-        plt.plot(t, target[:, i], 'g--')
-        plt.plot(t, pred[:, i], 'r.')
+        plt.subplot(n, 1, i+1)
+        plt.xticks(fontsize=15)
+        plt.yticks(fontsize=15)
+        plt.ylabel(outputs_names[i],fontsize=15)
+
+        plt.plot(t*10, target[:, i], 'g--',label=labels[0])
+        plt.plot(t*10, pred[:, i], 'r.',label=labels[1])
+        plt.legend(fontsize=15, loc = 1)
         #ax_i.set_ylim(minv - view/10, maxv + view/10)
         if i == 0:
-            plt.title(msg)
-
+            plt.title(msg,fontsize=20)
+    plt.xlabel('indexes', fontsize=15)
     #fig, axs = plt.subplots(6, 1)
     #for i, ax in enumerate(axs):
     #    ax.plot(target[:, i], 'g--', pred[:, i], 'r-')
@@ -264,6 +267,7 @@ def add_state_label(df):
                 cur_state = 4
         elif cur_state == 4:
             if cooling <= 17000 and ti <= 13:
+            #if cooling == 0:
                 cur_state = 1
         states.append(cur_state)
     ndf = df.copy(deep=True)
@@ -326,18 +330,26 @@ def get_mlp_network(layer_sizes, outputs_size):
 
 #画功耗误差折线图
 def draw_power_error(data,datasets,dir_name='visualizations'):
-    plt.figure(figsize=(9, 9))
-    plt.tick_params(labelsize=15)
-    plt.title('power-error', fontsize=18)
-    plt.xlabel('time(m)',fontsize=15)
-    plt.ylabel("power_error(%)",fontsize=15)
-    X = [i for  i in range(5,125, 5)]
+    plt.figure(figsize=(10, 6))
+    #plt.tick_params(labelsize=20)
+    #plt.title('power-error', fontsize=18)
+    X = [i for i in range(5, 125, 10)]
+    plt.xticks(X,fontsize=20)
+    plt.yticks(fontsize=20)
+    plt.xlabel('Time(m)',fontsize=22)
+    plt.ylabel("MAPE of energy consumption(%)",fontsize=22)
+    X = [i for i in range(5, 125, 5)]
     for id,everdata in enumerate(datasets):
-        plt.plot(X, data[id], label=everdata)
-    plt.legend(fontsize=15)
+        plt.plot(X, data[id], label=everdata, marker='o')
+        #plt.plot(X, data[id], marker='o')
+    plt.legend(fontsize=19, loc = 1)
+    plt.tight_layout()
     plt.savefig(os.path.join(
         dir_name, 'power_error.png'
     ))
+    plt.savefig(os.path.join(
+        dir_name, 'power_error.eps'
+    ), format="eps", dpi=600)
     plt.close()
 
 
@@ -355,8 +367,8 @@ def visualize_prediction(Y_label, Y_pred, s_test, pserver,base_dir, seg_length=5
         s_test_seg = s_test[begin:min(begin + seg_length, len(Y_pred))]
         #         scatter = plt.scatter(np.arange(begin, begin+len(tdf)), tdf['Power cooling'], c=tdf['states'], s=10)
         X = np.arange(begin, begin + len(y_label_seg))
-        outputs_names = ['Ti', 'Pcooling', 'Power cooling']
-        classes = ['unknown', 'closed', 'start-1', 'start-2', 'cooling']
+        outputs_names = ['Inlet temperature(℃)', 'Cooling production(w)', 'Instant cooling power(w)']
+        classes = ['unknown', 'Off', 'Start up stage 1', 'Start up stage 2', 'On']
 
         y_pserver = pserver[begin:min(begin + seg_length, len(Y_label))]
 
@@ -364,9 +376,9 @@ def visualize_prediction(Y_label, Y_pred, s_test, pserver,base_dir, seg_length=5
             plt.subplot(7, 2, i * 2 + 2)
             y_label = y_label_seg[:, i]
             y_pred = y_pred_seg[:, i]
-            for state in range(max_state+1):
+            for state in range(1,max_state+1):
                 indices = (s_test_seg.squeeze(axis=-1) == state)
-                scatter = plt.scatter(X[indices], y_pred[indices], label='pred-'+classes[state], s=5, marker='o')
+                scatter = plt.scatter(X[indices], y_pred[indices], label=classes[state], s=5, marker='o')
             plt.xlabel('indexes')
             plt.ylabel(y_name)
             plt.legend()
@@ -380,9 +392,9 @@ def visualize_prediction(Y_label, Y_pred, s_test, pserver,base_dir, seg_length=5
             y_label = y_label_seg[:, i]
             y_pred = y_pred_seg[:, i]
             plt.plot(X, y_label, '-k', label='Time Series')
-            for state in range(max_state + 1):
+            for state in range(1,max_state + 1):
                 indices = (s_test_seg.squeeze(axis=-1) == state)
-                scatter = plt.scatter(X[indices], y_pred[indices], label='pred-' + classes[state], s=5, marker='o')
+                scatter = plt.scatter(X[indices], y_pred[indices], label= classes[state], s=5, marker='o')
             plt.xlabel('indexes')
             plt.ylabel(y_name)
             plt.legend()
@@ -408,38 +420,46 @@ def visualize_prediction_compare(Y_label, Y_pred, s_test, pserver,base_dir, seg_
     ID = 0
     for begin in range(0, len(Y_pred), seg_length):
         ID += 1
-        plt.figure(figsize=(18, 15))
+        plt.figure(figsize=(20, 9))
+
         y_label_seg = Y_label[begin:min(begin + seg_length, len(Y_label))]
         y_pred_seg = Y_pred[begin:min(begin + seg_length, len(Y_pred))]
         s_test_seg = s_test[begin:min(begin + seg_length, len(Y_pred))]
         #         scatter = plt.scatter(np.arange(begin, begin+len(tdf)), tdf['Power cooling'], c=tdf['states'], s=10)
         X = np.arange(begin, begin + len(y_label_seg))
-        outputs_names = ['Ti', 'Pcooling', 'Power cooling']
-        classes = ['unknown', 'closed', 'start-1', 'start-2', 'cooling']
-
+        outputs_names = ['Inlet temperature(℃)', 'Cooling production(w)', 'Instant cooling power(w)']
+        classes = ['unknown', 'Off', 'Start up stage 1', 'Start up stage 2', 'On']
         for i, y_name in enumerate(outputs_names):
+
+            plt.subplots_adjust(hspace=0.4)  # 调整子图间距
             plt.subplot(3, 2, i * 2 + 2)
+            plt.xticks(fontsize=15)
+            plt.yticks(fontsize=15)
             y_label = y_label_seg[:, i]
             y_pred = y_pred_seg[:, i]
-            for state in range(max_state+1):
+            for state in range(1,max_state+1):
                 indices = (s_test_seg.squeeze(axis=-1) == state)
-                scatter = plt.scatter(X[indices], y_pred[indices], label='pred-'+classes[state], s=5, marker='o')
-            plt.xlabel('indexes')
-            plt.ylabel(y_name)
-            plt.legend()
+                scatter = plt.scatter(X[indices], y_pred[indices], label=classes[state], s=5, marker='o')
+            if(i==2):
+                plt.xlabel('Time(s)', fontsize=15)
+            plt.ylabel(y_name, fontsize=15)
+            plt.legend( fontsize=15, loc = 1)
             plt.subplot(3, 2, i * 2 + 1)
+            plt.xticks(fontsize=15)
+            plt.yticks(fontsize=15)
+            plt.plot(X, y_label, '-k', label='Truth')
+            if (i == 2):
+                plt.xlabel('Time(s)', fontsize=15)
+            plt.ylabel(y_name, fontsize=15)
+            plt.legend(fontsize=15, loc = 1)
 
-            plt.plot(X, y_label, '-k', label='Time Series')
-            plt.xlabel('indexes')
-            plt.ylabel(y_name)
-            plt.legend()
 
         plt.savefig(os.path.join(
             base_dir, dir_name, '%i-%i-%i.png' % (ID, begin, begin + seg_length)
         ))
         plt.close()
 
-def visualize_prediction_power(Y_label, Y_pred, s_test, pserver,base_dir, seg_length=500, dir_name='visualizations'):
+def visualize_prediction_one(Y_label, Y_pred, s_test, pserver,base_dir, seg_length=500, dir_name='visualizations',lablee = None):
     assert len(Y_pred) == len(Y_label)
     if not os.path.exists(os.path.join(base_dir, dir_name)):
         os.mkdir(os.path.join(base_dir, dir_name))
@@ -447,28 +467,111 @@ def visualize_prediction_power(Y_label, Y_pred, s_test, pserver,base_dir, seg_le
     ID = 0
     for begin in range(0, len(Y_pred), seg_length):
         ID += 1
-        plt.figure(figsize=(8, 4))
+        plt.figure(figsize=(7, 9))
+
         y_label_seg = Y_label[begin:min(begin + seg_length, len(Y_label))]
         y_pred_seg = Y_pred[begin:min(begin + seg_length, len(Y_pred))]
         s_test_seg = s_test[begin:min(begin + seg_length, len(Y_pred))]
         #         scatter = plt.scatter(np.arange(begin, begin+len(tdf)), tdf['Power cooling'], c=tdf['states'], s=10)
         X = np.arange(begin, begin + len(y_label_seg))
-        outputs_names = ['Ti', 'Pcooling', 'Power cooling']
-        classes = ['unknown', 'closed', 'start-1', 'start-2', 'cooling']
-        plt.subplot(1, 1, 1)
-        y_label = y_label_seg[:, 2]
-        y_pred = y_pred_seg[:, 2]
-        for state in range(max_state+1):
-            indices = (s_test_seg.squeeze(axis=-1) == state)
-            scatter = plt.scatter(X[indices], y_pred[indices], label='pred-'+classes[state], s=5, marker='o')
-        plt.xlabel('indexes')
-        plt.ylabel(outputs_names[2])
-        plt.legend()
+        outputs_names = ['Inlet temperature(℃)', 'Cooling production(w)', 'Instant cooling power(w)']
+        classes = ['unknown', 'Off', 'Start up stage 1', 'Start up stage 2', 'On']
+        for i, y_name in enumerate(outputs_names):
+            plt.subplot(3, 1, i+1)
+            plt.subplots_adjust(left=0.15,hspace=0.4)  # 调整子图间距
+            plt.xticks(fontsize=18)
+            plt.yticks(fontsize=18)
+            y_label = y_label_seg[:, i]
+            y_pred = y_pred_seg[:, i]
 
+            if lablee == 'rnn':
+                for state in range(1,max_state+1):
+                    indices = (s_test_seg.squeeze(axis=-1) == state)
+                    #scatter = plt.scatter(X[indices], y_pred[indices],s=1,marker='o')
+                    y_1 = y_pred.copy()
+                    for id, v in enumerate(indices):
+                        if v == False:
+                            y_1[id] = None
+                    #print(y_1)
+                    plt.plot(X, y_1)
+
+            if lablee == 'ours':
+                for state in range(1,max_state+1):
+                    indices = (s_test_seg.squeeze(axis=-1) == state)
+                    #scatter = plt.plot(X, y_pred,'-g')
+                    y_1 = y_pred.copy()
+                    for i, v in enumerate(indices):
+                        if v == False:
+                            y_1[i] = None
+                    plt.plot(X, y_1)
+            elif lablee=='truth':
+                    #indices = (s_test_seg.squeeze(axis=-1) == 0)
+                    plt.plot(X, y_pred, '-k', label='truth')
+            else:
+                    indices = (s_test_seg.squeeze(axis=-1) == 0)
+                    scatter = plt.plot(X[indices],y_pred[indices], '-b')
+
+
+            plt.ylabel(y_name, fontsize=18)
+        plt.xlabel('Time(s)', fontsize=18)
+
+        plt.tight_layout()
         plt.savefig(os.path.join(
             base_dir, dir_name, '%i-%i-%i.png' % (ID, begin, begin + seg_length)
         ))
+        plt.savefig(os.path.join(
+            base_dir, dir_name, '%i-%i-%i.eps' % (ID, begin, begin + seg_length)
+        ),format="eps",dpi=600)
         plt.close()
+
+
+
+def visualize_prediction_power(Y_label, Y_pred, s_test, pserver,temperature,base_dir, seg_length=500, dir_name='visualizations'):
+    assert len(Y_pred) == len(Y_label)
+    if not os.path.exists(os.path.join(base_dir, dir_name)):
+        os.mkdir(os.path.join(base_dir, dir_name))
+    max_state = int(np.max(s_test))
+    ID = 0
+    for begin in range(0, len(Y_pred), seg_length):
+        ID += 1
+        plt.figure(figsize=(8, 5))
+        y_label_seg = Y_label[begin:min(begin + seg_length, len(Y_label))]
+        y_pred_seg = Y_pred[begin:min(begin + seg_length, len(Y_pred))]
+        s_test_seg = s_test[begin:min(begin + seg_length, len(Y_pred))]
+        #         scatter = plt.scatter(np.arange(begin, begin+len(tdf)), tdf['Power cooling'], c=tdf['states'], s=10)
+        X = np.arange(begin, begin + len(y_label_seg))
+        outputs_names = ['Inlet temperature(℃)', 'Cooling production(w)', 'Instant cooling power(w)']
+        classes = ['unknown', 'Off', 'Start up stage 1', 'Start up stage 2', 'On']
+        plt.subplot(1, 1, 1)
+        plt.xticks(fontsize=19)
+        plt.yticks(fontsize=19)
+        #plt.title('lower temperature limits-%d°C'%(temperature), fontsize=18)
+        y_label = y_label_seg[:, 2]
+        y_pred = y_pred_seg[:, 2]
+        for state in range(1,max_state+1):
+            indices = (s_test_seg.squeeze(axis=-1) == state)
+            # scatter = plt.scatter(X[indices], y_pred[indices],s=1,marker='o')
+            y_1 = y_pred.copy()
+            for id, v in enumerate(indices):
+                if v == False:
+                    y_1[id] = None
+            # print(y_1)
+            plt.plot(X, y_1)
+        plt.xlabel('Time(s)', fontsize=24)
+        plt.ylabel(outputs_names[2],fontsize=24)
+        plt.legend(fontsize=21, loc = 1,labels=['Off', 'Start up stage 1', 'Start up stage 2', 'On'])
+        plt.tight_layout()
+        plt.savefig(os.path.join(
+            base_dir, dir_name, '%i-%i-%i.png' % (ID, begin, begin + seg_length)
+        ))
+        plt.savefig(os.path.join(
+            base_dir, dir_name, '%i-%i-%i.pdf' % (ID, begin, begin + seg_length)
+        ))
+        plt.close()
+
+
+
+
 
 def display_states_confusion_matrix(true, pred, path, labels, print_handle=print):
 

@@ -37,11 +37,15 @@ def box_img(states,no,all_states,dataset):
     figure, axes = plt.subplots()
     axes.set_xticklabels(dataset)
     axes.boxplot(states[no], patch_artist=False)  # 描点上色
-    plt.title(all_states[no-1])
-    plt.xlabel('Pserver(w)')
-    plt.ylabel('time(s)')
+    #plt.title(all_states[no-1],fontsize=20)
+    plt.xticks(fontsize=23)
+    plt.yticks(fontsize=23)
+    plt.xlabel('Average head load(w)', fontsize=23)
+    plt.ylabel('Time(s)', fontsize=23)
     axes.yaxis.grid(True)
+    plt.tight_layout()
     plt.savefig('./results/state%d.png' % no)
+    plt.savefig('./results/state%d.eps' % no,format="eps", dpi=600)
     #plt.show()
 
 
@@ -147,7 +151,7 @@ if __name__ == '__main__':
     # probability_distribution(data=states[3], bins_interval=1,margin=0,no=3)
     # probability_distribution(data=states[4], bins_interval=1,margin=0,no=4)
     # #probability_distribution(data=states[5], bins_interval=1,margin=0,no=5)
-    all_states2=['on', 'off', 'start-1', 'start-2']
+    all_states2=['on', 'start-1', 'start-2','off']
     for i in range(1, 5):
         box_img(states,i,all_states2,dataset)
 

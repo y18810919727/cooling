@@ -2,5 +2,5 @@
 
 cd ..
 
-CUDA_VISIBLE_DEVICES=7 python main.py  --save  1003_ode_rnn_not_t  --model DFA --dfa_yaml ode_rnn --mymodel rnn
+CUDA_VISIBLE_DEVICES=3 python main.py  --save  1005_ode_rnn  --model DFA --dfa_yaml ode_rnn --mymodel rnn
 

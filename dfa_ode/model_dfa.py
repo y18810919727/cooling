@@ -76,7 +76,7 @@ class DFA_MIMO(nn.Module):
         else:
             xt = torch.cat([inputs, self.expand_input(inputs)], dim=-1)
 
-        new_s, new_s_prob, extra_info = self.dfa_odes_forward.state_transform(states, xt,inputs)
+        new_s, new_s_prob, extra_info = self.dfa_odes_forward.state_transform(states, xt,x_in=inputs)
         if reshape:
             new_s_prob = new_s_prob.reshape(bs, l, -1)
             new_s = new_s.reshape(bs, l, -1)
