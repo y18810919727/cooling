@@ -93,7 +93,7 @@ parser.add_argument("--debug", action="store_true", help="debug mode, for accele
 #数据集['Data_train_1_7_1','Data_train_1_8k','Data_train_3_8k','Data_train_4_2k','Data_validate']
 #files = ['P-1.7k.csv','P-1.85k.csv','P-3.8K.csv','P-4.2k.csv','P-6.3k.csv']
 parser.add_argument("--datasets", type=list, default=['P-1.7k','P-3.8k','P-6.3k'], help="datasets")
-parser.add_argument("--describe", type=str, default="三个数据集,新的打标签方式,ns", help="describe")
+parser.add_argument("--describe", type=str, default="三个数据集,ns,改loss,加loss_state", help="describe")
 parser.add_argument("--mymodel", type=str, default='merge', choices=['merge', 'rnn', 'one'])
 
 paras = parser.parse_args()

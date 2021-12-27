@@ -183,19 +183,24 @@ class EpochTrainer(object):
             self.model.zero_grad()
 
             pre_outputs, pre_states = self.model.forward_posterior(pre_X,torch.cat([pre_X, pre_Y_target], dim=-1),dfa_states=pre_s, dt=pre_dt)
-            state0 = pre_states[:, -1]    #得到初始状态
+            state0 = pre_states[:, -1]    #得到初始状态# (4000,800)
 
             with tr('forward'):
                 Y_pred, states_pred = self.model.forward_prediction(X, state0=state0, dfa_states=s, dt=dt)
 
-
+            ht = state0[:,3:-2]
             # Y_pred_power = ((Y_pred[:, :, 2]*dt.reshape(-1,800)).sum(axis=1))
             # Y_target_power = ((Y_target[:, :, 2]*dt.reshape(-1,800)).sum(axis=1))
+
+
+            loss_h = torch.norm(ht,p = 2,dim =1).sum()/4000
+
 
             loss_pred = self.model.criterion(
                 torch.cat([pre_outputs, Y_pred], dim=1),#
                 torch.cat([pre_Y_target, Y_target], dim=1)
             )
+
             #
             # loss_power = self.model.criterion(
             #     Y_pred_power,#只考虑预测
@@ -258,9 +263,9 @@ class EpochTrainer(object):
                 dfa_states_classifications_pred_all.append(all_dfa_states_tag.reshape(-1).detach().cpu())
                 dfa_states_classifications_label_all.append(states_label.reshape(-1).detach().cpu())
             if self.mymodel != 'one':
-                loss = loss_classification + loss_pred
+                loss = loss_classification + loss_pred+loss_h+loss_state
             else:
-                loss = loss_pred
+                loss = loss_pred+loss_h+loss_state
 
             with tr('backward'):
                 loss.backward() #反向传播
@@ -277,9 +282,9 @@ class EpochTrainer(object):
                     float(loss_pred.item()), tr
                 ))
             else:
-                self.logging('Epoch {}, iters {}-{}, train_size {} ,loss {:.4f}, loss_pred {:.4f}, loss_class {:.4f},time {}'.format(
-                    epoch, i+1, int(np.ceil((len(train_inds)-1) / self.batch_size)), bs , float(loss.item()),
-                    float(loss_pred.item()), float(loss_classification.item()), tr
+                self.logging('Epoch {}, iters {}-{}, train_size {} ,loss {:.4f},loss_state {:.4f}, loss_h {:.4f},loss_pred {:.4f}, loss_class {:.4f},time {}'.format(
+                    epoch, i+1, int(np.ceil((len(train_inds)-1) / self.batch_size)), bs , float(loss.item()),float(loss_state.item()),
+                    float(loss_h),float(loss_pred.item()), float(loss_classification.item()), tr
                 ))
 
             # for i in range(int(np.ceil((len(self.train_inds)-1) / self.batch_size))):
@@ -300,6 +305,7 @@ class EpochTrainer(object):
             #     ['unknown', 'closed', 'start-1', 'start-2', 'start-3', 'cooling', 'stop'],
             #     self.logging
             # )
+
 
 
         return epoch_loss

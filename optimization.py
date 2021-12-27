@@ -38,6 +38,11 @@ parser.add_argument("--save_dir", type=str, default='None')
 parser.add_argument("--datasets", type=list, default=['P-1.7k','P-3.8k','P-6.3k'], help="datasets")
 
 #parser.add_argument("--datasets", type=list, default=['P-1.5k','P-2.5k','P-3.5k','P-4.5k','P-6.5k'], help="datasets")
+'''
+改训练集
+选模型
+换归一化值
+'''
 
 if __name__ == '__main__':
 
@@ -49,7 +54,7 @@ if __name__ == '__main__':
     log_file_all = os.path.join(save_dir_img, 'all.txt' )
     logging_all = SimpleLogger(log_file_all)  # log to file
     # 导入入归一化值
-    filename = "./optimization/tu.pkl"
+    filename = "./optimization/1116.pkl"
     file = open(filename, "rb")
     data = pickle.load(file)
     X_mean = data['X_mean']
@@ -94,7 +99,7 @@ if __name__ == '__main__':
             #log_file = os.path.join(paras.save_dir, ' %.2f-%.2f-log.txt' % (paras.low, paras.high))
 
             device = torch.device('cuda:0') if torch.cuda.is_available() else torch.device('cpu')
-            model = torch.load(os.path.join(paras.save_dir, 'best_dev_model.pt'),
+            model = torch.load(os.path.join(paras.save_dir, 'best_dev_model_200.pt'),
                                map_location=device)  # load模型
             model.dfa_odes_forward.transforms = defaultdict(list)
             model.dfa_odes_forward.add_transform(1, 2, [[0, 'geq', paras.high]])
