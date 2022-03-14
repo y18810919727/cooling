@@ -241,7 +241,7 @@ class DFA_ODENets(nn.Module):
     def select_dfa_states(states):
         return states[:, -1:]
 
-    def combinational_ode(self, s, ht, xt, dt): #对于不同的状态，找对应的ode
+    def combinational_ode(self, s, ht, xt, dt): #对于不同的状态，找对应的ode 用的欧拉法
         nht = torch.zeros_like(ht)
         for i in range(self.ode_nums):
             indices = (s.squeeze(dim=-1) == i) #判断是哪个状态

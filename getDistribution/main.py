@@ -21,6 +21,7 @@ from pandas import Series
 from util import get_Dataset
 
 
+
 def xw_toExcel(data, fileName):  # xlsxwriter库储存数据到excel
     workbook = xw.Workbook(fileName)  # 创建工作簿
     worksheet1 = workbook.add_worksheet("sheet1")  # 创建子表
@@ -32,21 +33,52 @@ def xw_toExcel(data, fileName):  # xlsxwriter库储存数据到excel
     worksheet1.write_row('A5', data[5])  
     workbook.close()  # 关闭表
 
+# def box_img(states,no,all_states,dataset):
+#     figure, axes = plt.subplots()
+#     axes.set_xticklabels(dataset)
+#     axes.boxplot(states[no], patch_artist=False)  # 描点上色
+#     #plt.title(all_states[no-1],fontsize=20)
+#     plt.xticks(fontsize=23)
+#     plt.yticks(fontsize=23)
+#     plt.xlabel('Average head load(w)', fontsize=23)
+#     plt.ylabel('Time(s)', fontsize=23)
+#     axes.yaxis.grid(True)
+#     plt.tight_layout()
+#     plt.savefig('./results/state%d.png' % no)
+#     plt.savefig('./results/state%d.eps' % no,format="eps", dpi=600)
+#     #plt.show()
+
+#
+# def box_img(states,no,all_states,dataset):
+#     plt.figure(figsize=(30, 9))
+#     figure, axes = plt.subplots()
+#     print(dataset)
+#     plt.ylabel(dataset, fontsize=23)
+#     #axes.set_yticklabels(dataset)
+#     axes.boxplot(states[no], patch_artist=False,vert=False)  # 描点上色
+#     plt.title(all_states[no-1],fontsize=20)
+#     plt.xticks(fontsize=23)
+#     plt.yticks(fontsize=23)
+#     plt.xlabel('Average head load(w)', fontsize=23)
+#     plt.ylabel('Time(s)', fontsize=23)
+#     #axes.yaxis.grid(True)
+#     plt.tight_layout()
+#     plt.savefig('./results/state%d.png' % no)
+#     plt.savefig('./results/state%d.eps' % no,format="eps", dpi=600)
+#     #plt.show()
 
 def box_img(states,no,all_states,dataset):
-    figure, axes = plt.subplots()
-    axes.set_xticklabels(dataset)
-    axes.boxplot(states[no], patch_artist=False)  # 描点上色
-    #plt.title(all_states[no-1],fontsize=20)
-    plt.xticks(fontsize=23)
-    plt.yticks(fontsize=23)
-    plt.xlabel('Average head load(w)', fontsize=23)
-    plt.ylabel('Time(s)', fontsize=23)
-    axes.yaxis.grid(True)
+    plt.figure(figsize=(8, 5))  # 设置画布的尺寸
+    labels = dataset
+    plt.xticks(fontsize=20)
+    plt.yticks(fontsize=20)
+    plt.ylabel('Average head load(w)', fontsize=21)
+    plt.xlabel('Time(s)', fontsize=21)
     plt.tight_layout()
+    # vert=False:水平箱线图；showmeans=True：显示均值
+    plt.boxplot(states[no], labels=labels, vert=False,patch_artist = True,boxprops = {'facecolor':'tan'},medianprops={'color':'red'})
     plt.savefig('./results/state%d.png' % no)
     plt.savefig('./results/state%d.eps' % no,format="eps", dpi=600)
-    #plt.show()
 
 
 # 按照固定区间长度绘制频率分布直方图
@@ -80,7 +112,7 @@ def probability_distribution(data, bins_interval=1, margin=1,no=0):
 #读取csv文件
 if __name__ == '__main__':
     #file = 'lable_all.csv'
-    dataset=['P-1.7k','P-3.8k','P-4.2k','P-6.3k']
+    dataset=['1.7k','3.8k','4.2k','6.3k']
     all_states = {}
     for everdata in dataset:
         # Xtrain, Ytrain, ttrain, strain = [df.to_numpy(dtype=np.float32) for df in get_Dataset('../middata/'+everdata+'.csv')]
@@ -96,7 +128,7 @@ if __name__ == '__main__':
         n=0
 
         nowState="0"
-        with open('lable_%s.csv'%(everdata), "r") as f:
+        with open('lable_P-%s.csv'%(everdata), "r") as f:
             reader = csv.reader(f)
             for i,row in enumerate(reader):
                 if i>=1:

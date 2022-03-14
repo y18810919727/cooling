@@ -6,7 +6,7 @@ import os
 import json
 from collections import defaultdict
 import pandas as pd
-from util import get_Dataset, visualize_prediction, array_operate_with_nan, t2np, SimpleLogger,visualize_prediction_compare,visualize_prediction_power
+from util import get_Dataset, visualize_prediction, array_operate_with_nan, t2np, SimpleLogger,visualize_prediction_compare,visualize_prediction_power,visualize_prediction_power2
 
 import torch
 import argparse
@@ -27,6 +27,8 @@ set up model
 """
 
 
+
+
 parser.add_argument("--low", type=float, default=12, help='The temperature activating the work of cooling')
 parser.add_argument("--high", type=float, default=20, help='The temperature stopping the cooling system')
 parser.add_argument("--model", type=str, default='best_dev_model-Copy1')
@@ -36,13 +38,9 @@ parser.add_argument("--data", type=str, default='test.csv')
 parser.add_argument("--save_dir", type=str, default='None')
 #数据集
 parser.add_argument("--datasets", type=list, default=['P-1.7k','P-3.8k','P-6.3k'], help="datasets")
-
-#parser.add_argument("--datasets", type=list, default=['P-1.5k','P-2.5k','P-3.5k','P-4.5k','P-6.5k'], help="datasets")
-'''
-改训练集
-选模型
-换归一化值
-'''
+parser.add_argument("--datasets2", type=list, default=['heat load-1.7k','heat load-3.8k','heat load-6.3k'], help="datasets")
+parser.add_argument("--datasets3", type=list, default=['1.7k','3.8k','6.3k'], help="datasets")
+#parser.add_argument("--datasets", type=list, default=['P-1.5k','P-2.5k','P-3.5k','P-4.5k','P-6.5k'], help="datasets")efault=['P-1.7k','P-3.8k','P-6.3k']
 
 if __name__ == '__main__':
 
@@ -63,6 +61,7 @@ if __name__ == '__main__':
     Y_std = data['Y_std']
 
     sum_powers_all = []
+
     for idx,everdata in enumerate(paras.datasets):
 
         sum_powers = []  # 遍历从min到max
@@ -99,7 +98,7 @@ if __name__ == '__main__':
             #log_file = os.path.join(paras.save_dir, ' %.2f-%.2f-log.txt' % (paras.low, paras.high))
 
             device = torch.device('cuda:0') if torch.cuda.is_available() else torch.device('cpu')
-            model = torch.load(os.path.join(paras.save_dir, 'best_dev_model_200.pt'),
+            model = torch.load(os.path.join(paras.save_dir, 'best_dev_model_260.pt'),
                                map_location=device)  # load模型
             model.dfa_odes_forward.transforms = defaultdict(list)
             model.dfa_odes_forward.add_transform(1, 2, [[0, 'geq', paras.high]])
@@ -114,8 +113,7 @@ if __name__ == '__main__':
             #     Xtest[paras.bptt:, 0] * X_std[0] + X_mean[0],
             #     save_dir,
             #     seg_length=2000, dir_name='vis-%.1f' % (low))  # 模型自己预测的
-
-            visualize_prediction_power(  # 可视化
+            visualize_prediction_power2(  # 可视化画图专用
                 Ytest[paras.bptt:] * Y_std + Y_mean, t2np(Ytest_pred) * Y_std + Y_mean, test_dfa_state_pred_array,
                 Xtest[paras.bptt:, 0] * X_std[0] + X_mean[0],low
                 ,save_dir,
@@ -129,24 +127,24 @@ if __name__ == '__main__':
             ).sum()
 
             logging('Low: %.2f,  Predicted Power: %.3f' % (low, float(sum_power)))
-
             sum_powers.append(sum_power)
         min_sum_power = min(sum_powers)
         ratio_power_decline = ((sum_powers[0]-min_sum_power)/sum_powers[0])*100
         logging_all('%s ratio_power_decline: %.2f' % (everdata,ratio_power_decline))
 
         sum_powers_all.append(sum_powers)
-        plt.title(everdata + " - " + 'Power', fontsize=20)
-        plt.xticks(fontsize=15)
-        plt.yticks(fontsize=15)
-        min_idx = sum_powers.index(min(sum_powers))
-        plt.plot(np.arange(Min, Max, step), sum_powers)
-        plt.plot( Min+(min_idx*step),  sum_powers[min_idx], marker='.')
-        plt.xlabel('The set point of lower bound temperature in cooling system(℃)', fontsize=15)
-        plt.ylabel('Power Consumption(kwh)', fontsize=15)
-        plt.savefig(os.path.join(save_dir, '%s-%.1f-%.1f-%.1f.png' % (everdata,Min, Max, step)))
-        plt.close()
-        logging_all('%s best point %d'% (everdata,Min+(min_idx*step)))
+        #单个数据集下的折线图
+        # plt.title(everdata + " - " + 'Power', fontsize=20)
+        # plt.xticks(fontsize=15)
+        # plt.yticks(fontsize=15)
+        # min_idx = sum_powers.index(min(sum_powers))
+        # plt.plot(np.arange(Min, Max, step), sum_powers)
+        # plt.plot( Min+(min_idx*step),  sum_powers[min_idx], marker='.')
+        # plt.xlabel('The set point of lower bound temperature in cooling system(℃)', fontsize=15)
+        # plt.ylabel('Power Consumption(kwh)', fontsize=15)
+        # plt.savefig(os.path.join(save_dir, '%s-%.1f-%.1f-%.1f.png' % (everdata,Min, Max, step)))
+        # plt.close()
+        # logging_all('%s best point %d'% (everdata,Min+(min_idx*step)))
 
         # if os.path.exists(log_file):
         #     with open(log_file) as f:
@@ -157,15 +155,21 @@ if __name__ == '__main__':
         #
         # else:
 
+    #中文论文图
     plt.title('all' + " - " + 'Power')
-    plt.figure(figsize=(9, 5))
-    color = ['blue', 'red', 'green', 'purple']
+    plt.figure(figsize=(10, 6))
+    color = ['#2F4F4F', '#DC143C', '#4B0082', 'green']
+    line = ['-','--','-.']
     for i, sum_power in enumerate(sum_powers_all):
         # plt.title('Compare the power consumption at different lower temperature limits', fontsize=20)
-        plt.plot(np.arange(Min, Max, step), sum_power, label=paras.datasets[i], color=color[i])
+        plt.plot(np.arange(Min, Max, step), sum_power, label=paras.datasets3[i],linestyle=line[i], color=color[i])
         min_idx = sum_power.index(min(sum_power))
-        plt.plot(Min + (min_idx * step), sum_power[min_idx], marker='x', color=color[i])
+        plt.plot(Min + (min_idx * step), sum_power[min_idx], marker='^', color=color[i],markersize='19')
         plt.legend(fontsize=18)
+    plt.text(14.3, 4.1, '    Optimal\nlower boundary', fontsize=16, color='black')
+    plt.arrow(15,4,1.4, -0.53,shape='full',head_width=0.1,head_length=0.2,length_includes_head=True,ec ='black')
+    plt.arrow(15,4,0.98, 1.11, shape='full',head_width=0.1,head_length=0.2,length_includes_head=True,ec ='black')
+    plt.arrow(15,4, 0, 2.1, shape='full',head_width=0.1,head_length=0.2,length_includes_head=True,ec ='black')
     plt.xticks(fontsize=19)
     plt.yticks(fontsize=19)
     plt.xlabel('$T_{low}(℃)$', fontsize=20)
@@ -174,3 +178,26 @@ if __name__ == '__main__':
     plt.savefig(os.path.join(save_dir_img, '%.1f-%.1f-%.1f.png' % (Min, Max, step)))
     plt.savefig(os.path.join(save_dir_img, '%.1f-%.1f-%.1f.eps' % (Min, Max, step)), format="eps", dpi=600)
     plt.close()
+
+    # plt.title('all' + " - " + 'Power')
+    # plt.figure(figsize=(9, 5))
+    # color = ['blue', 'red', 'green', 'purple']
+    # line = ['-', '--', ':']
+    # for i, sum_power in enumerate(sum_powers_all):
+    #     # plt.title('Compare the power consumption at different lower temperature limits', fontsize=20)
+    #     plt.plot(np.arange(Min, Max, step), sum_power, label=paras.datasets2[i], linestyle=line[i], color=color[i])
+    #     min_idx = sum_power.index(min(sum_power))
+    #     plt.plot(Min + (min_idx * step), sum_power[min_idx], marker='x', color=color[i], markersize='20')
+    #     plt.legend(fontsize=18)
+    # plt.text(14.3, 7, '    Optimal\nlower boundary', fontsize=16, color='black')
+    # plt.arrow(15, 6.9, -0.9, -2.5, shape='full', head_width=0.1, head_length=0.2, length_includes_head=True)
+    # plt.arrow(15, 6.9, 0, -1.2, shape='full', head_width=0.1, head_length=0.2, length_includes_head=True)
+    # plt.arrow(15, 6.9, 0.39, -0.52, shape='full', head_width=0.1, head_length=0.2, length_includes_head=True)
+    # plt.xticks(fontsize=19)
+    # plt.yticks(fontsize=19)
+    # plt.xlabel('$T_{low}(℃)$', fontsize=20)
+    # plt.ylabel('Energy consumption(kwh)', fontsize=20)
+    # plt.tight_layout()
+    # plt.savefig(os.path.join(save_dir_img, '%.1f-%.1f-%.1f.png' % (Min, Max, step)))
+    # plt.savefig(os.path.join(save_dir_img, '%.1f-%.1f-%.1f.eps' % (Min, Max, step)), format="eps", dpi=600)
+    # plt.close()

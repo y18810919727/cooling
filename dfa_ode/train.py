@@ -11,8 +11,6 @@ EpochTrainer for training recurrent models on single sequence of inputs and outp
 by chunking into bbtt-long segments.
 """
 
-
-
 class EpochTrainer(object):
     #前期的准备 np转cuda
     def __init__(self, model, optimizer, epochs, X, Y, states, dt, batch_size=1, gpu=False, bptt=50,all_sqe_nums=False,
@@ -263,9 +261,9 @@ class EpochTrainer(object):
                 dfa_states_classifications_pred_all.append(all_dfa_states_tag.reshape(-1).detach().cpu())
                 dfa_states_classifications_label_all.append(states_label.reshape(-1).detach().cpu())
             if self.mymodel != 'one':
-                loss = loss_classification + loss_pred+loss_h+loss_state
+                loss = loss_classification + loss_pred+loss_h
             else:
-                loss = loss_pred+loss_h+loss_state
+                loss = loss_pred+loss_h
 
             with tr('backward'):
                 loss.backward() #反向传播
@@ -282,31 +280,13 @@ class EpochTrainer(object):
                     float(loss_pred.item()), tr
                 ))
             else:
-                self.logging('Epoch {}, iters {}-{}, train_size {} ,loss {:.4f},loss_state {:.4f}, loss_h {:.4f},loss_pred {:.4f}, loss_class {:.4f},time {}'.format(
-                    epoch, i+1, int(np.ceil((len(train_inds)-1) / self.batch_size)), bs , float(loss.item()),float(loss_state.item()),
+                self.logging('Epoch {}, iters {}-{}, train_size {} ,loss {:.4f} loss_h {:.4f},loss_pred {:.4f}, loss_class {:.4f},time {}'.format(
+                    epoch, i+1, int(np.ceil((len(train_inds)-1) / self.batch_size)), bs , float(loss.item()),
                     float(loss_h),float(loss_pred.item()), float(loss_classification.item()), tr
                 ))
-
-            # for i in range(int(np.ceil((len(self.train_inds)-1) / self.batch_size))):
             if self.debug and i>=1:
                 break
-
-
         epoch_loss /= cum_bs
-
-            # import shutil
-            # if not os.path.exists(os.path.join(self.save_dir, 'cm')):
-            #     os.mkdir(os.path.join(self.save_dir, 'cm'))
-            # from util import display_states_confusion_matrix
-            # display_states_confusion_matrix(
-            #     torch.cat(dfa_states_classifications_label_all).numpy().tolist(),
-            #     torch.cat(dfa_states_classifications_pred_all).numpy().tolist(),
-            #     os.path.join(self.save_dir, 'cm', 'cm-epoch%d' % epoch),
-            #     ['unknown', 'closed', 'start-1', 'start-2', 'start-3', 'cooling', 'stop'],
-            #     self.logging
-            # )
-
-
 
         return epoch_loss
 

@@ -6,7 +6,7 @@ import argparse
 import numpy as np
 
 
-from util import SimpleLogger, show_data, init_weights, array_operate_with_nan, get_Dataset, visualize_prediction, t2np, draw_table,draw_table_all,calculation_ms,visualize_prediction_compare,draw_power_error,visualize_prediction_one
+from util import SimpleLogger, show_data, init_weights, array_operate_with_nan, get_Dataset, visualize_prediction, t2np, draw_table,draw_table_all,calculation_ms,visualize_prediction_compare,draw_power_error,visualize_prediction_one,visualize_prediction_one2
 parser = argparse.ArgumentParser(description='Models for Continuous Stirred Tank dataset')
 parser.add_argument("--save", type=str, default='test', help="experiment logging folder")
 parser.add_argument("--bptt", type=int, default=800, help="bptt")
@@ -66,7 +66,7 @@ if __name__ == '__main__':
     paras = parser.parse_args()
     paras.save = os.path.join('../results', paras.save)  # 路径拼接，改变paras.save为'results/tmp'
     # 数据集['Data_train_1_7_1','Data_train_1_8k','Data_train_3_8k','Data_train_4_2k','Data_validate']
-    datasets=['P-1.7k','P-3.8k','P-4.2k','P-6.3k']
+    datasets=['P-1.7k','P-3.8k','P-6.3k']
     all_sqe_nums = {}
     len_sqe = []
     result_path = os.path.join(paras.save, 'predict_result')
@@ -182,7 +182,7 @@ if __name__ == '__main__':
     if paras.compare:
         one = '1008-one-model-alld'
         ode_rnn = '1005_ode_rnn'
-        h_ode = '1005-allp_alld'
+        h_ode = '1016_wendu_alls_cooling_no_high'#'1005-allp_alld'
         for everdata in datasets:
             #验证集,取dev,one，model
             one_model_file = '../results/'+one+"/predict_result/dev/epoch_90/datafigs_"+everdata+".pkl"
@@ -215,21 +215,21 @@ if __name__ == '__main__':
             y_pred_test_ours = data3['y_pred_dev']
             state_ours = data3['sdev']
             file3.close()
-            visualize_prediction_one(Ytest[paras.bptt:] * Y_std + Y_mean, Ytest[paras.bptt:] * Y_std + Y_mean, state_one,
+            visualize_prediction_one2(Ytest[paras.bptt:] * Y_std + Y_mean, Ytest[paras.bptt:] * Y_std + Y_mean, state_one,
                                      Xtest[paras.bptt:, 0] * X_std[0] + X_mean[0],
                                      './truth/',
                                      seg_length=1000, dir_name='%s' % (everdata),lablee = 'truth')  # truth
 
-            visualize_prediction_one( Ytest[paras.bptt:] * Y_std + Y_mean, y_pred_test_one * Y_std + Y_mean,state_one,Xtest[paras.bptt:,0]* X_std[0] + X_mean[0],
+            visualize_prediction_one2( Ytest[paras.bptt:] * Y_std + Y_mean, y_pred_test_one * Y_std + Y_mean,state_one,Xtest[paras.bptt:,0]* X_std[0] + X_mean[0],
                                         './one/',
                                         seg_length=1000, dir_name='%s' %(everdata),lablee = 'one')# one
 
-            visualize_prediction_one(Ytest[paras.bptt:] * Y_std + Y_mean, y_pred_test_rnn * Y_std + Y_mean, state_rnn,
+            visualize_prediction_one2(Ytest[paras.bptt:] * Y_std + Y_mean, y_pred_test_rnn * Y_std + Y_mean, state_rnn,
                                      Xtest[paras.bptt:, 0] * X_std[0] + X_mean[0],
                                      './rnn/',
                                      seg_length=1000, dir_name='%s' % (everdata),lablee = 'rnn')  # rnn
 
-            visualize_prediction_one(Ytest[paras.bptt:] * Y_std + Y_mean, y_pred_test_ours * Y_std + Y_mean, state_ours,
+            visualize_prediction_one2(Ytest[paras.bptt:] * Y_std + Y_mean, y_pred_test_ours * Y_std + Y_mean, state_ours,
                                      Xtest[paras.bptt:, 0] * X_std[0] + X_mean[0],
                                      './ours/',
                                      seg_length=1000, dir_name='%s' % (everdata),lablee = 'ours')  # ours
