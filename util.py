@@ -377,7 +377,8 @@ def visualize_prediction(Y_label, Y_pred, s_test, pserver,base_dir, seg_length=5
             plt.subplot(7, 2, i * 2 + 2)
             y_label = y_label_seg[:, i]
             y_pred = y_pred_seg[:, i]
-            for state in range(1,max_state+1):
+            # 对于one_ode 这里改成0
+            for state in range(0,max_state+1):
                 indices = (s_test_seg.squeeze(axis=-1) == state)
                 scatter = plt.scatter(X[indices], y_pred[indices], label=classes[state], s=5, marker='o')
             plt.xlabel('indexes')
@@ -743,3 +744,4 @@ def display_states_confusion_matrix(true, pred, path, labels, print_handle=print
 
 def t2np(tensor):
     return tensor.squeeze(dim=0).detach().cpu().numpy()
+

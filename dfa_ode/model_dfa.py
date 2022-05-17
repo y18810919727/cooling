@@ -5,29 +5,7 @@ import torch
 
 from common.modules import MSELoss_nan
 from torch import nn
-from util import interpolate_tensors_with_nan, get_mlp_network
-from collections import defaultdict
 from dfa_ode.odes_stationary import DFA_ODENets
-
-
-
-# class CDECell(nn.Module):
-#
-#     def __init__(self, k_in, k_h, num_layers, hidden_size=32):
-#         super().__init__()
-#         self.k_in = k_in
-#         self.k_h = k_h
-#
-#         layer_sizes = [k_in] + [hidden_size] * num_layers
-#         self.fuc = get_mlp_network(layer_sizes, k_h * k_in)
-#
-#     def forward(self, ht, xt_dt):
-#         vec = self.fuc(ht)
-#         vec = vec.reshape(-1, self.k_h, self.k_in)
-#         return (vec @ xt_dt.unsqueeze(dim=-1)).squeeze(-1)
-
-
-
 
 class DFA_MIMO(nn.Module):
 
@@ -42,15 +20,9 @@ class DFA_MIMO(nn.Module):
         self.k_h = k_h
         self.dropout = dropout
         self.criterion = MSELoss_nan()
-        #self.criterion = nn.SmoothL1Loss()  # huber loss
-        # self.interpol = interpol
         self.cell_type = cell_type
-        # self.cell = cell_factory(k_in, k_out, k_h, dropout=dropout, **kwargs)
-
         self.expand_input = nn.Sequential(nn.Linear(k_in, k_h), nn.Tanh())
         self.expand_input_out = nn.Sequential(nn.Linear(k_in + k_out, k_h), nn.Tanh())
-
-        # self.state0 = nn.Parameter(torch.zeros(k_h,), requires_grad=True)  # trainable initial state
         self.dfa_odes_forward = DFA_ODENets(ode_nums, layers, k_in, k_out, k_h, y_mean, y_std,#前项预测，输入输入量做预测
                                                   odes_para=odes_para, ode_2order=ode_2order,
                                                   state_transformation_predictor=state_transformation_predictor,
@@ -60,8 +32,6 @@ class DFA_MIMO(nn.Module):
                                                    odes_para=odes_para, ode_2order=ode_2order,
                                                     cell_type=cell_type,
                                                     Ly_share=Ly_share)
-        #self.register_buffer('state0', torch.zeros(k_h, ))  # fixed zero initial state
-
     def states_classification(self, states, inputs,t):
         reshape = False
         bs, l = None, None
@@ -98,8 +68,6 @@ class DFA_MIMO(nn.Module):
     """
     modelcall,给定初始状态，将输入扔进去，更新状态，预测
     """
-
-
     def model_call(self, model, expand_cell, in_x,inputs , state0=None, dfa_states=None, dt=None, **kwargs):
         """
         :param model: dfa_odes
@@ -111,12 +79,10 @@ class DFA_MIMO(nn.Module):
         :param kwargs:
         :return: outputs (bs, len, k_out), states (bs, len, k_h)
         """
-        # assert dfa_states is not None
-        # state : [ht, cum_t, dfa_state]
+
         state = state0
         outputs = []
         states = []
-
         inputs = expand_cell(inputs) #升到20维  //第一层
         inputs = torch.cat([in_x, inputs], dim=-1)
 

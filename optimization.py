@@ -64,7 +64,8 @@ if __name__ == '__main__':
 
     for idx,everdata in enumerate(paras.datasets):
 
-        sum_powers = []  # 遍历从min到max
+        sum_powers = []  # 遍历从min到max 制冷功率
+        sum_pcooling_powers = []                #制冷量
         Min = 12
         Max = 19
         step = 0.5
@@ -118,42 +119,33 @@ if __name__ == '__main__':
                 Xtest[paras.bptt:, 0] * X_std[0] + X_mean[0],low
                 ,save_dir,
                 seg_length=1000, dir_name='vis-%.1f' % (low))
-
+            # 制冷功率的积分
             predicted_power = (t2np(Ytest_pred) * Y_std + Y_mean)[..., -1].reshape(-1)  # 算power
             predicted_power[predicted_power < 0] = 0
             sum_power = (
                 predicted_power[:7200] *
                     dttest_tn[:, paras.bptt:paras.bptt+7200].reshape(-1).detach().cpu().numpy()/(3.6*100000)
             ).sum()
-
             logging('Low: %.2f,  Predicted Power: %.3f' % (low, float(sum_power)))
             sum_powers.append(sum_power)
+
+            #制冷量的积分
+            pcooling_power = (t2np(Ytest_pred) * Y_std + Y_mean)[..., 1].reshape(-1)
+            pcooling_power[pcooling_power <0 ] = 0
+            sum_pcooling_power =  (
+                pcooling_power[:7200] *
+                    dttest_tn[:, paras.bptt:paras.bptt+7200].reshape(-1).detach().cpu().numpy()/(3.6*100000)
+            ).sum()
+
+            logging('Low: %.2f, sum_pcooling_powerr: %.3f' % (low, float(sum_pcooling_power)))
+            sum_pcooling_powers.append(sum_pcooling_power)
+
+
         min_sum_power = min(sum_powers)
         ratio_power_decline = ((sum_powers[0]-min_sum_power)/sum_powers[0])*100
         logging_all('%s ratio_power_decline: %.2f' % (everdata,ratio_power_decline))
 
         sum_powers_all.append(sum_powers)
-        #单个数据集下的折线图
-        # plt.title(everdata + " - " + 'Power', fontsize=20)
-        # plt.xticks(fontsize=15)
-        # plt.yticks(fontsize=15)
-        # min_idx = sum_powers.index(min(sum_powers))
-        # plt.plot(np.arange(Min, Max, step), sum_powers)
-        # plt.plot( Min+(min_idx*step),  sum_powers[min_idx], marker='.')
-        # plt.xlabel('The set point of lower bound temperature in cooling system(℃)', fontsize=15)
-        # plt.ylabel('Power Consumption(kwh)', fontsize=15)
-        # plt.savefig(os.path.join(save_dir, '%s-%.1f-%.1f-%.1f.png' % (everdata,Min, Max, step)))
-        # plt.close()
-        # logging_all('%s best point %d'% (everdata,Min+(min_idx*step)))
-
-        # if os.path.exists(log_file):
-        #     with open(log_file) as f:
-        #         s = f.read()
-        #         pos = s.rfind(': ')
-        #         #sum_powers.append(main(paras))
-        #         sum_powers.append(float(s[pos+2:]))
-        #
-        # else:
 
     #中文论文图
     plt.title('all' + " - " + 'Power')

@@ -6,9 +6,7 @@ import os
 import json
 
 import torch
-from torch import nn
 from dfa_ode.modules import Classification, Predictor, MLPCell, ODEMergeCell,ODE_RNN,ODEOneCell
-from common.modules import MSELoss_nan
 from torch import nn
 from collections import defaultdict
 
@@ -185,12 +183,6 @@ class DFA_ODENets(nn.Module):
 
                     new_s[indices_time_out] = state_index_plus_one
                     new_s_prob[indices_time_out, state_index_plus_one] = 1.0
-                    # updated_new_s[indices_time_out] = state_index_plus_one
-                    # updated_new_s_prob[indices_time_out] = 1.0
-                    # new_s[chosen_indices] = updated_new_s
-                    # new_s_prob[chosen_indices] =
-                    # new_s[chosen_indices[indices_time_out]] = state_index_plus_one
-                    # new_s_prob[chosen_indices][indices_time_out][:, state_index_plus_one] = 1.0
 
                 elif isinstance(predictor, Classification):# 废弃
                     # Applying the classifying network to make multi-classification
@@ -312,5 +304,7 @@ class DFA_ODENets(nn.Module):
         new_cum_t[updated_indices] = 0
 
         return self.decode_y(new_ht), torch.cat([new_ht, new_cum_t, new_s.float()], dim=-1)
+
+
 
 

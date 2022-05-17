@@ -57,6 +57,7 @@ class EpochTrainer(object):
             Xtrain = []
             Ytrain = []
             dttrain = []
+            ttrain = []
             states_train = []
             Xtrain = np.array(Xtrain)
             for key in self.all_sqe_nums:
@@ -66,10 +67,10 @@ class EpochTrainer(object):
                 N = tail-head
 
                 self.all_sqe_nums[key][0] = Xtrain.shape[0]
-                Xtrain =  np.append(Xtrain,np.asarray([self.X[i+head:head+min(N, i + w), :] for i in range(max(1, N - w + 1))])).reshape(-1,800,2) # (instances N-w+1, w, k_in)    取数组中第i个的全部数据
-                Ytrain =  np.append(Ytrain,np.asarray([self.Y[i+head:head+min(N, i + w), :] for i in range(max(1, N - w + 1))])).reshape(-1,800,3)  # (instances N-w+1, w, k_out)
-                dttrain = np.append(dttrain,np.asarray([self.dt[i+head:head+min(N, i + w), :] for i in range(max(1, N - w + 1))])).reshape(-1,800,1)   # (instances N-w+1, w, k_out)
-                states_train = np.append(states_train,np.asarray([self.states[i+head:head+min(N, i + w), :] for i in range(max(1, N - w + 1))])).reshape(-1,800,1)  # (instances N-w+1, w, k_out)
+                Xtrain = np.append(Xtrain, np.asarray([self.X[i + head:head + min(N, i + w), :] for i in range(max(1, N - w + 1))])).reshape(-1, 800,2)  # (instances N-w+1, w, k_in)    取数组中第i个的全部数据
+                Ytrain = np.append(Ytrain, np.asarray([self.Y[i + head:head + min(N, i + w), :] for i in range(max(1, N - w + 1))])).reshape(-1, 800,3)  # (instances N-w+1, w, k_out)
+                dttrain = np.append(dttrain, np.asarray([self.dt[i + head:head + min(N, i + w), :] for i in range(max(1, N - w + 1))])).reshape(-1, 800,1)  # (instances N-w+1, w, k_out)
+                states_train = np.append(states_train, np.asarray([self.states[i + head:head + min(N, i + w), :] for i in range(max(1, N - w + 1))])).reshape(-1, 800,1)  # (instances N-w+1, w, k_out)
                 self.all_sqe_nums[key][1] = Xtrain.shape[0]-self.w
 
             Xtrain = torch.tensor(Xtrain, dtype=torch.float)
@@ -94,6 +95,7 @@ class EpochTrainer(object):
             self.Xtrain1 = Xtrain1.cuda() if self.gpu else Xtrain1
             self.Ytrain1 = Ytrain1.cuda() if self.gpu else Ytrain1
             self.dttrain1 = dttrain1.cuda() if self.gpu else dttrain1
+
             self.states_train1 = states_train1.cuda() if self.gpu else self.states_train1
 
         self.logging('preparing data: {}'.format(tr))
@@ -103,8 +105,6 @@ class EpochTrainer(object):
             all_states = self.model(self.Xtrain1, state0=None, dfa_states=self.states_train1, dt=self.dttrain1)[1].squeeze(
                 0)  # (seq_len, 2)  no state given to model -> start with model.state0
             self.all_states = all_states.data
-
-        # all_states_posterior = self.model.rnn_encoder(self.Ytrain1)
     # 选出应该打乱的序列
     def random_list(self):
         train_list=[]
@@ -113,16 +113,6 @@ class EpochTrainer(object):
             print(a[-1])
             train_list += a
         return train_list
-
-    # #字典随机排序，，使其能够随机训练某个训练集
-    # def random_dic(self,dicts):
-    #     dict_key_ls = list(dicts.keys())
-    #     random.shuffle(dict_key_ls)
-    #     new_dic = {}
-    #     for key in dict_key_ls:
-    #         new_dic[key] = dicts.get(key)
-    #     return new_dic
-
     def __call__(self, epoch) -> object:
 
         #sqe_head = 0;
@@ -130,26 +120,9 @@ class EpochTrainer(object):
         epoch_loss = 0.
         np.random.shuffle(self.train_list)  # 每个下标对应一个窗口，打散
         train_inds = self.train_list
-
-        # Generating Time Recoder
         tr = TimeRecorder()
-
-        # train initial state only once per epoch
-
         self.model.train()
         self.model.zero_grad()
-        # Y_pred, _ = self.model(self.Xtrain1[:, :self.bptt, :], dt=self.dttrain1[:, :self.bptt, :])
-        # nonan_indexes = ~torch.isnan(self.Ytrain1[:, :self.bptt, :])
-        # #(no state given: use model.state0)
-        # loss = self.model.criterion(Y_pred[nonan_indexes], self.Ytrain1[:, :self.bptt, :][nonan_indexes])
-        # loss.backward()
-        # self.optimizer.step()
-
-
-        # set all states only once per epoch (trains much faster than at each iteration)
-        # (no gradient through initial state for each chunk)
-        # with tr('set all states'):
-        #     self.set_states()
         dfa_states_classifications_pred_all = []
         dfa_states_classifications_label_all = []
 
@@ -158,11 +131,6 @@ class EpochTrainer(object):
             iter_inds = train_inds[i * self.batch_size: (i + 1) * self.batch_size]# 提取最开始2000个batch_size
             iter_inds_next = [x+self.w for x in iter_inds]  #把
             bs = len(iter_inds)
-
-            # get initial states for next batch
-            #self.set_states()  #only 1 x per epoch, much faster
-
-            # get batch input and target data
             cum_bs += bs
 
             pre_X = self.Xtrain[iter_inds, :, :]  # (batch, bptt, k_in)  #过去的xy
@@ -185,26 +153,12 @@ class EpochTrainer(object):
 
             with tr('forward'):
                 Y_pred, states_pred = self.model.forward_prediction(X, state0=state0, dfa_states=s, dt=dt)
-
             ht = state0[:,3:-2]
-            # Y_pred_power = ((Y_pred[:, :, 2]*dt.reshape(-1,800)).sum(axis=1))
-            # Y_target_power = ((Y_target[:, :, 2]*dt.reshape(-1,800)).sum(axis=1))
-
-
             loss_h = torch.norm(ht,p = 2,dim =1).sum()/4000
-
-
             loss_pred = self.model.criterion(
                 torch.cat([pre_outputs, Y_pred], dim=1),#
                 torch.cat([pre_Y_target, Y_target], dim=1)
             )
-
-            #
-            # loss_power = self.model.criterion(
-            #     Y_pred_power,#只考虑预测
-            #     Y_target_power
-            # )
-
 
             if self.mymodel != 'one':
                 # The model determines the dfa states at time t by itself based on h(t-1), state(t-1), x(t).
@@ -242,15 +196,6 @@ class EpochTrainer(object):
                         stop_time_label[not_null_indices],
                         extra_info['predicted_stop_cum_time'][not_null_indices]
                     )
-                    # for state_index in range(6):
-                    #     print('state : %d, mean of label %.2f, mean of prediction %.2f' % (state_index, float(
-                    #         stop_time_label[not_null_indices][s_for_state_transform[not_null_indices] == state_index].mean()
-                    #     ), float(
-                    #         extra_info['predicted_stop_cum_time'][not_null_indices][
-                    #             s_for_state_transform[not_null_indices] == state_index
-                    #         ].mean()
-                    #     )))
-
                 else:
                     #自动状态转换相关
                     loss_classification = self.class_criterion(
@@ -272,8 +217,6 @@ class EpochTrainer(object):
             self.optimizer.step()
 
             epoch_loss += loss.item() * bs #梯度下降
-            #epoch_loss_pred += loss_pred.item() * bs
-           # epoch_loss_power += loss_power.item() *bs
             if self.mymodel == 'one':
                 self.logging('Epoch {}, iters {}-{}, train_size {} ,loss {:.4f}, loss_pred {:.4f},time {}'.format(
                     epoch, i+1, int(np.ceil((len(train_inds)-1) / self.batch_size)), bs , float(loss.item()),
