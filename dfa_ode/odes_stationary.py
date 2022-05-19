@@ -1,12 +1,7 @@
 #!/usr/bin/python
 # -*- coding:utf8 -*-
-import numpy as np
-import math
-import os
-import json
-
 import torch
-from dfa_ode.modules import Classification, Predictor, MLPCell, ODEMergeCell,ODE_RNN,ODEOneCell
+from dfa_ode.modules import Predictor, ODEMergeCell,ODE_RNN,ODEOneCell
 from torch import nn
 from collections import defaultdict
 
@@ -32,8 +27,6 @@ class DFA_ODENets(nn.Module):
             ODECellClass = ODE_RNN
         elif cell_type == 'one':
             ODECellClass = ODEOneCell
-        # elif cell_type == 'cde':
-        #     ODECellClass = CDECell
         else:
             raise NotImplementedError('Cell %s is not implemented' % cell_type)
 
@@ -52,12 +45,8 @@ class DFA_ODENets(nn.Module):
                 for kind, state in state_transformation_predictor:
                     if kind == 'predict':
                         self.state_transformation_predictor[str(state)] = Predictor(
-                           self.k_t+self.k_in+self.k_expand_in+self.k_in+self.k_h,
-                            22
-                        )
-                    elif kind == 'classify':
-                        self.state_transformation_predictor[str(state)] = Classification(
-                            self.k_h + self.k_h, self.k_h
+                            self.k_t+self.k_in+self.k_expand_in+self.k_in+self.k_h,
+                            self.k_in + self.k_h
                         )
                     else:
                         raise NotImplementedError
@@ -78,11 +67,7 @@ class DFA_ODENets(nn.Module):
                     if kind == 'predict':
                         self.state_transformation_predictor[str(state)] = Predictor(
                             self.k_expand_in + self.k_in + self.k_h + self.k_t + self.k_s,
-                            22
-                        )
-                    elif kind == 'classify':
-                        self.state_transformation_predictor[str(state)] = Classification(
-                            self.k_h + self.k_h, self.k_h
+                            self.k_in + self.k_h
                         )
                     else:
                         raise NotImplementedError
@@ -94,8 +79,6 @@ class DFA_ODENets(nn.Module):
                 k_in, k_out, k_h,self.k_expand_in,self.k_t, layers, Ly=(Ly if Ly_share else self.make_decoder(k_h, k_out)),
                 ode_2order=ode_2order, name=para['name'], y_type=para['y_type'], cell=para['cell']
             ) for para in odes_para])
-
-
 
         if transformations_rules is not None:
             for t in transformations_rules:   #遍历所有转移规则
@@ -183,15 +166,6 @@ class DFA_ODENets(nn.Module):
 
                     new_s[indices_time_out] = state_index_plus_one
                     new_s_prob[indices_time_out, state_index_plus_one] = 1.0
-
-                elif isinstance(predictor, Classification):# 废弃
-                    # Applying the classifying network to make multi-classification
-                    pred_prob = self.state_transformation_predictor[str(state_index)](
-                        torch.cat([ht[chosen_indices], cum_t[chosen_indices]], dim=-1)
-                    )
-                    pred_label = pred_prob.argmax(dim=-1)
-                    new_s[chosen_indices] = pred_label
-                    new_s_prob[chosen_indices] = pred_prob
             else:  #规则转换
                 # If there is no Classification network in state_transformation_predictor,
                 # applying the DFA rules for transformations.

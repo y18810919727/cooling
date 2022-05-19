@@ -29,7 +29,6 @@ class EpochTrainer(object):
         self.bptt = bptt  # for now: constant segment length, hence constant train indices
         self.w = min(bptt, X.shape[0]//2)
         self.class_criterion = torch.nn.CrossEntropyLoss()
-
         self.all_states = None
         self.rnn_states = None
         self.debug = debug
@@ -57,22 +56,18 @@ class EpochTrainer(object):
             Xtrain = []
             Ytrain = []
             dttrain = []
-            ttrain = []
             states_train = []
             Xtrain = np.array(Xtrain)
             for key in self.all_sqe_nums:
-                #N = self.X.shape[0]
                 head = self.all_sqe_nums[key][0]
                 tail = self.all_sqe_nums[key][1]
                 N = tail-head
-
                 self.all_sqe_nums[key][0] = Xtrain.shape[0]
                 Xtrain = np.append(Xtrain, np.asarray([self.X[i + head:head + min(N, i + w), :] for i in range(max(1, N - w + 1))])).reshape(-1, 800,2)  # (instances N-w+1, w, k_in)    取数组中第i个的全部数据
                 Ytrain = np.append(Ytrain, np.asarray([self.Y[i + head:head + min(N, i + w), :] for i in range(max(1, N - w + 1))])).reshape(-1, 800,3)  # (instances N-w+1, w, k_out)
                 dttrain = np.append(dttrain, np.asarray([self.dt[i + head:head + min(N, i + w), :] for i in range(max(1, N - w + 1))])).reshape(-1, 800,1)  # (instances N-w+1, w, k_out)
                 states_train = np.append(states_train, np.asarray([self.states[i + head:head + min(N, i + w), :] for i in range(max(1, N - w + 1))])).reshape(-1, 800,1)  # (instances N-w+1, w, k_out)
                 self.all_sqe_nums[key][1] = Xtrain.shape[0]-self.w
-
             Xtrain = torch.tensor(Xtrain, dtype=torch.float)
             Ytrain = torch.tensor(Ytrain, dtype=torch.float)
             dttrain = torch.tensor(dttrain, dtype=torch.float)
@@ -84,7 +79,6 @@ class EpochTrainer(object):
             self.Ytrain = Ytrain.cuda() if self.gpu else Ytrain
             self.dttrain = dttrain.cuda() if self.gpu else dttrain
             self.states_train = states_train.cuda() if self.gpu else states_train
-            # self.train_inds = list(range(self.Xtrain.size(0)))  # all instances
             self.train_inds = list(range(self.Xtrain.size(0)-w))  # all instances, minus w to prepare historical seq
 
         with tr('long seq data generation'):
@@ -95,16 +89,9 @@ class EpochTrainer(object):
             self.Xtrain1 = Xtrain1.cuda() if self.gpu else Xtrain1
             self.Ytrain1 = Ytrain1.cuda() if self.gpu else Ytrain1
             self.dttrain1 = dttrain1.cuda() if self.gpu else dttrain1
-
             self.states_train1 = states_train1.cuda() if self.gpu else self.states_train1
 
         self.logging('preparing data: {}'.format(tr))
-
-    def set_states(self):
-        with torch.no_grad():  #no backprob beyond initial state for each chunk.
-            all_states = self.model(self.Xtrain1, state0=None, dfa_states=self.states_train1, dt=self.dttrain1)[1].squeeze(
-                0)  # (seq_len, 2)  no state given to model -> start with model.state0
-            self.all_states = all_states.data
     # 选出应该打乱的序列
     def random_list(self):
         train_list=[]
@@ -114,8 +101,6 @@ class EpochTrainer(object):
             train_list += a
         return train_list
     def __call__(self, epoch) -> object:
-
-        #sqe_head = 0;
         cum_bs = 0
         epoch_loss = 0.
         np.random.shuffle(self.train_list)  # 每个下标对应一个窗口，打散
@@ -132,12 +117,10 @@ class EpochTrainer(object):
             iter_inds_next = [x+self.w for x in iter_inds]  #把
             bs = len(iter_inds)
             cum_bs += bs
-
             pre_X = self.Xtrain[iter_inds, :, :]  # (batch, bptt, k_in)  #过去的xy
             pre_dt = self.dttrain[iter_inds, :, :]  # (batch, bptt, 1)
             pre_Y_target = self.Ytrain[iter_inds, :, :]
             pre_s = self.states_train[iter_inds, :, :]
-
             X = self.Xtrain[iter_inds_next, :, :]  # (batch, bptt, k_in)   #未来的xy
             dt = self.dttrain[iter_inds_next, :, :]  # (batch, bptt, 1)
             Y_target = self.Ytrain[iter_inds_next, :, :]
@@ -230,7 +213,6 @@ class EpochTrainer(object):
             if self.debug and i>=1:
                 break
         epoch_loss /= cum_bs
-
         return epoch_loss
 
 

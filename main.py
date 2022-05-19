@@ -1,30 +1,23 @@
-import os
-import sys
 import numpy as np
-from time import time
-from datetime import timezone, timedelta,datetime
 import torch
-GPU = torch.cuda.is_available()
-
-parent = os.path.dirname(sys.path[0])#os.getcwd())
-sys.path.append(parent)
-from dfa_ode.model_dfa import DFA_MIMO
-from dfa_ode.train import EpochTrainer
-from util import SimpleLogger, show_data, init_weights, array_operate_with_nan, get_Dataset, visualize_prediction, t2np, \
-    draw_table, draw_table_all, calculation_ms,get_Dataset_one
-
-import pandas as pd
-
-
-from tensorboard_logger import configure, log_value
 import argparse
 import os
 import pickle
 import sys
 import traceback
 import shutil
-import yaml
+from time import time
+from tensorboard_logger import configure, log_value
+from dfa_ode.model_dfa import DFA_MIMO
+from dfa_ode.train import EpochTrainer
+from util import SimpleLogger, init_weights, array_operate_with_nan, get_Dataset, visualize_prediction, t2np, \
+    draw_table, draw_table_all, calculation_ms,get_Dataset_one
+from datetime import timezone, timedelta,datetime
 
+
+GPU = torch.cuda.is_available()
+parent = os.path.dirname(sys.path[0])
+sys.path.append(parent)
 """
 potentially varying input parameters
 """
@@ -36,58 +29,35 @@ set up model
 - model:
     GRU (compensated GRU to avoid linear increase of state; has standard GRU as special case for Euler scheme and equidistant data)
     GRUinc (incremental GRU, for baseline only)
-- time_aware:
-    no: ignore uneven spacing: for GRU use original GRU implementation; ignore 'scheme' variable
-    input: use normalized next interval size as extra input feature
-    variable: time-aware implementation
-"""
 
 """
-论文中的代码参数
-"""
+
 
 parser.add_argument("--test", action="store_true", help="Testing model in para.save")
-parser.add_argument("--time_aware", type=str, default='variable', choices=['no', 'input', 'variable'], help=methods)
 parser.add_argument("--model", type=str, default='GRU', choices=['GRU', 'GRUinc', 'ARNN', 'ARNNinc', 'DFA'])
-parser.add_argument("--interpol", type=str, default='constant', choices=['constant', 'linear'])
-
-# data
-parser.add_argument("--missing", type=float, default=0.0, help="fraction of missing samples (0.0 or 0.5)")
-
 # model architecture
 parser.add_argument("--k_h", type=int, default=20, help="dimension of hidden state")
-
 # in case method == 'variable'
 RKchoices = ['Euler', 'Midpoint', 'Kutta3', 'RK4']
 parser.add_argument("--scheme", type=str, default='Euler', choices=RKchoices, help='Runge-Kutta training scheme')
-
 # training
 parser.add_argument("--batch_size", type=int, default=4000, help="batch size")
 parser.add_argument("--visualization_len", type=int, default=2000, help="The length of visualization.")
 parser.add_argument("--epochs", type=int, default=500, help="Number of epochs")
 parser.add_argument("--lr", type=float, default=0.005, help="learning rate")
 parser.add_argument("--bptt", type=int, default=800, help="bptt")
-parser.add_argument("--dropout", type=float, default=0., help="drop prob")
 parser.add_argument("--l2", type=float, default=0., help="L2 regularization")
-
-
-# admin
 parser.add_argument("--save", type=str, default='results', help="experiment logging folder")
 parser.add_argument("--eval_epochs", type=int, default=5, help="validation every so many epochs")
 parser.add_argument("--seed", type=int, default=None, help="random seed")
 parser.add_argument("--powertime", type=int, default=1800, help="powertime")
 
-
 # ODE_DFA
-parser.add_argument("--dfa_yaml", type=str, default='dfa1', help="The setting of dfa ode")
+parser.add_argument("--dfa_yaml", type=str, default='dfa_ns', help="The setting of dfa ode")
 parser.add_argument("--dfa_known", action="store_true",
                     help="The states of dfa for each positions are known in test and evaluation.")
-
-parser.add_argument("--linear_decoder", action="store_true", help="Type of Ly")
-
 # during development
 parser.add_argument("--reset", action="store_true", help="reset even if same experiment already finished")
-parser.add_argument("--short_encoding", action="store_true", help="Encoding short sequences to generate state0")
 parser.add_argument("--debug", action="store_true", help="debug mode, for acceleration")
 
 #数据集['Data_train_1_7_1','Data_train_1_8k','Data_train_3_8k','Data_train_4_2k','Data_validate']
@@ -148,9 +118,6 @@ fixed input parameters
 """
 目前测试集和验证集是一样的，没有分开
 """
-#frac_dev = 15/100
-#frac_test = 15/100
-
 GPU = torch.cuda.is_available()
 logging('Using GPU?', GPU)
 
@@ -163,11 +130,7 @@ if torch.cuda.is_available():
     torch.cuda.manual_seed_all(paras.seed)
 np.random.seed(paras.seed)
 
-
-#paras.seed = 679987
 logging('Random seed', paras.seed)
-
-
 
 """
 Load data
@@ -175,7 +138,7 @@ Load data
 """
 分为debug和非debug模式的训练集和测试集文件
 """
-datasets = paras.datasets        #datasets=['Data_train_1_7_1','Data_train_1_8k','Data_train_3_8k','Data_train_4_2k','Data_validate']
+datasets = paras.datasets
 all_sqe_nums = {}
 len_sqe = []
 if paras.debug: # Using short dataset for acceleration
@@ -188,7 +151,6 @@ if paras.debug: # Using short dataset for acceleration
     len_sqe.append(0)
     len_sqe.append(int(Xtrain.size / 2))
     all_sqe_nums['train'] =len_sqe
-
 else:
     Xtrain=[]
     Ytrain=[]
@@ -225,10 +187,6 @@ Ntrain = Xtrain.shape[0]  #序列长度
 evaluation function
 RRSE error
 """
-
-"""
-评估指标，算rrse
-"""
 def prediction_error(truth, prediction):
     length = min(truth.shape[0], prediction.shape[0])
     truth, prediction = truth[-length:], prediction[-length:]
@@ -239,20 +197,9 @@ def prediction_error(truth, prediction):
         rse = se / np.sum((truth - np.mean(truth, axis=0))**2)  # relative squared error
         rrse = np.mean(np.sqrt(rse))  # square root, followed by mean over channels
         return 100 * rrse  # in percentage
-    # each shape (sequence, n_outputs)
-    # Root Relative Squared Error
     results = [prediction_error(truth[:, i], prediction[:, i]) for i in range(truth.shape[-1])]
     return np.mean(results)
 
-
-
-"""
-- model:
-    GRU (compensated GRU to avoid linear increase of state; has standard GRU as special case for Euler scheme and equidistant data)
-    GRUinc (incremental GRU, for baseline only)
-"""
-
-#time_aware options
 
 
 #算均值和标准差，神经网络输入之前需要把数据做归一化
@@ -288,7 +235,7 @@ if GPU:
     model = model.cuda()
 
 params = sum([np.prod(p.size()) for p in model.parameters()])  #提取该model所有权重参数总量
-logging('\nModel %s (time_aware: %s, scheme %s) with %d trainable parameters' % (paras.model, paras.time_aware, paras.scheme, params))
+logging('\nModel %s (scheme %s) with %d trainable parameters' % (paras.model, paras.scheme, params))
 for n, p in model.named_parameters():
     p_params = np.prod(p.size())
     print('\t%s\t%d (cuda: %s)'%(n, p_params, str(p.is_cuda)))

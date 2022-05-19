@@ -6,7 +6,7 @@ import os
 import json
 from collections import defaultdict
 import pandas as pd
-from util import get_Dataset, visualize_prediction, array_operate_with_nan, t2np, SimpleLogger,visualize_prediction_compare,visualize_prediction_power,visualize_prediction_power2
+from util import get_Dataset, t2np, SimpleLogger,visualize_prediction_power2
 
 import torch
 import argparse
@@ -16,17 +16,7 @@ parser = argparse.ArgumentParser(description='Models for Continuous Stirred Tank
 
 # model definition
 methods = """
-set up model
-- model:
-    GRU (compensated GRU to avoid linear increase of state; has standard GRU as special case for Euler scheme and equidistant data)
-    GRUinc (incremental GRU, for baseline only)
-- time_aware:
-    no: ignore uneven spacing: for GRU use original GRU implementation; ignore 'scheme' variable
-    input: use normalized next interval size as extra input feature
-    variable: time-aware implementation
 """
-
-
 
 
 parser.add_argument("--low", type=float, default=12, help='The temperature activating the work of cooling')
@@ -40,7 +30,6 @@ parser.add_argument("--save_dir", type=str, default='None')
 parser.add_argument("--datasets", type=list, default=['P-1.7k','P-3.8k','P-6.3k'], help="datasets")
 parser.add_argument("--datasets2", type=list, default=['heat load-1.7k','heat load-3.8k','heat load-6.3k'], help="datasets")
 parser.add_argument("--datasets3", type=list, default=['1.7k','3.8k','6.3k'], help="datasets")
-#parser.add_argument("--datasets", type=list, default=['P-1.5k','P-2.5k','P-3.5k','P-4.5k','P-6.5k'], help="datasets")efault=['P-1.7k','P-3.8k','P-6.3k']
 
 if __name__ == '__main__':
 
@@ -147,21 +136,21 @@ if __name__ == '__main__':
 
         sum_powers_all.append(sum_powers)
 
-    #中文论文图
+
     plt.title('all' + " - " + 'Power')
-    plt.figure(figsize=(10, 6))
-    color = ['#2F4F4F', '#DC143C', '#4B0082', 'green']
-    line = ['-','--','-.']
+    plt.figure(figsize=(9, 5))
+    color = ['blue', 'red', 'green', 'purple']
+    line = ['-', '--', ':']
     for i, sum_power in enumerate(sum_powers_all):
         # plt.title('Compare the power consumption at different lower temperature limits', fontsize=20)
-        plt.plot(np.arange(Min, Max, step), sum_power, label=paras.datasets3[i],linestyle=line[i], color=color[i])
+        plt.plot(np.arange(Min, Max, step), sum_power, label=paras.datasets2[i], linestyle=line[i], color=color[i])
         min_idx = sum_power.index(min(sum_power))
-        plt.plot(Min + (min_idx * step), sum_power[min_idx], marker='^', color=color[i],markersize='19')
+        plt.plot(Min + (min_idx * step), sum_power[min_idx], marker='x', color=color[i], markersize='20')
         plt.legend(fontsize=18)
-    plt.text(14.3, 4.1, '    Optimal\nlower boundary', fontsize=16, color='black')
-    plt.arrow(15,4,1.4, -0.53,shape='full',head_width=0.1,head_length=0.2,length_includes_head=True,ec ='black')
-    plt.arrow(15,4,0.98, 1.11, shape='full',head_width=0.1,head_length=0.2,length_includes_head=True,ec ='black')
-    plt.arrow(15,4, 0, 2.1, shape='full',head_width=0.1,head_length=0.2,length_includes_head=True,ec ='black')
+    plt.text(14.3, 7, '    Optimal\nlower boundary', fontsize=16, color='black')
+    plt.arrow(15, 6.9, -0.9, -2.5, shape='full', head_width=0.1, head_length=0.2, length_includes_head=True)
+    plt.arrow(15, 6.9, 0, -1.2, shape='full', head_width=0.1, head_length=0.2, length_includes_head=True)
+    plt.arrow(15, 6.9, 0.39, -0.52, shape='full', head_width=0.1, head_length=0.2, length_includes_head=True)
     plt.xticks(fontsize=19)
     plt.yticks(fontsize=19)
     plt.xlabel('$T_{low}(℃)$', fontsize=20)
@@ -170,26 +159,3 @@ if __name__ == '__main__':
     plt.savefig(os.path.join(save_dir_img, '%.1f-%.1f-%.1f.png' % (Min, Max, step)))
     plt.savefig(os.path.join(save_dir_img, '%.1f-%.1f-%.1f.eps' % (Min, Max, step)), format="eps", dpi=600)
     plt.close()
-
-    # plt.title('all' + " - " + 'Power')
-    # plt.figure(figsize=(9, 5))
-    # color = ['blue', 'red', 'green', 'purple']
-    # line = ['-', '--', ':']
-    # for i, sum_power in enumerate(sum_powers_all):
-    #     # plt.title('Compare the power consumption at different lower temperature limits', fontsize=20)
-    #     plt.plot(np.arange(Min, Max, step), sum_power, label=paras.datasets2[i], linestyle=line[i], color=color[i])
-    #     min_idx = sum_power.index(min(sum_power))
-    #     plt.plot(Min + (min_idx * step), sum_power[min_idx], marker='x', color=color[i], markersize='20')
-    #     plt.legend(fontsize=18)
-    # plt.text(14.3, 7, '    Optimal\nlower boundary', fontsize=16, color='black')
-    # plt.arrow(15, 6.9, -0.9, -2.5, shape='full', head_width=0.1, head_length=0.2, length_includes_head=True)
-    # plt.arrow(15, 6.9, 0, -1.2, shape='full', head_width=0.1, head_length=0.2, length_includes_head=True)
-    # plt.arrow(15, 6.9, 0.39, -0.52, shape='full', head_width=0.1, head_length=0.2, length_includes_head=True)
-    # plt.xticks(fontsize=19)
-    # plt.yticks(fontsize=19)
-    # plt.xlabel('$T_{low}(℃)$', fontsize=20)
-    # plt.ylabel('Energy consumption(kwh)', fontsize=20)
-    # plt.tight_layout()
-    # plt.savefig(os.path.join(save_dir_img, '%.1f-%.1f-%.1f.png' % (Min, Max, step)))
-    # plt.savefig(os.path.join(save_dir_img, '%.1f-%.1f-%.1f.eps' % (Min, Max, step)), format="eps", dpi=600)
-    # plt.close()
