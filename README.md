@@ -10,5 +10,5 @@ cd scripts
 ./optimization.sh
 ```
 
-###  figure of results
-https://raw.githubusercontent.com/y18810919727/cooling/master/results/result.png
+###  figure of example results
+![image](https://raw.githubusercontent.com/y18810919727/cooling/master/results/result.png)
