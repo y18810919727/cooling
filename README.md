@@ -11,4 +11,4 @@ cd scripts
 ```
 
 ###  figure of results
-![](C:/Users/ncy/Desktop/毕业论文/1-0-2000.png)
+https://github.com/y18810919727/cooling/blob/master/results/result.png
