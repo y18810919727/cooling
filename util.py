@@ -5,6 +5,7 @@ import torch.nn as nn
 import matplotlib.pyplot as plt
 plt.switch_backend('agg')
 
+from matplotlib.ticker import ScalarFormatter
 
 import time
 
@@ -39,14 +40,11 @@ def draw_table(file,integral,error,length,base_dir,dir_name='visualizations'):
     if not os.path.exists(os.path.join(base_dir, dir_name)):
         os.mkdir(os.path.join(base_dir, dir_name))
     plt.figure(figsize=(20, 4))
-    # 列名
     vals = integral
     col = []
     for i in range(0,len(integral[0])):
         col.append(f'{length * i} - {length * (i + 1)}')
-    # 行名
     row = ["truth", "prediction"]
-    # 表格里面的具体值
     plt.subplot(2, 1, 1)
     plt.title(file+" - "+'integral (ws)')
     tab = plt.table(cellText=vals,
@@ -60,9 +58,7 @@ def draw_table(file,integral,error,length,base_dir,dir_name='visualizations'):
 
     vals = error
     col = ["MAE","MAPE(%)"]
-    # 行名
     row = ["mean", "std"]
-    # 表格里面的具体值
     plt.subplot(2, 1, 2)
     plt.title(file + " - " + 'error')
     tab = plt.table(cellText=vals,
@@ -85,12 +81,9 @@ def draw_table_all(file,error_all,base_dir):
     if not os.path.exists(base_dir):
         os.mkdir(base_dir)
     plt.figure(figsize=(20, 4))
-    # 列名
     vals = error_all
     col = file
-    # 行名
     row = ["mae", "mape"]
-    # 表格里面的具体值
     plt.title('error_all')
     tab = plt.table(cellText=vals,
                     colLabels=col,
@@ -106,14 +99,12 @@ def draw_table_all(file,error_all,base_dir):
     ))
     plt.close()
 
-#算预测powercoling的预测值和真实值的每length个点的平均值，标准差，积分
 def calculation_ms(truth, prediction,dttrain,length):
     rounds = (int(truth.shape[0]/length))
     integral = []
     integral_tarr = []
     integral_parr = []
     mae_s = []
-    #rmse_s = []
     mape_s = []
     for i in range(rounds):
         integral_t = (truth[i*length:(i+1)*length] * dttrain.reshape(-1)[i*length:(i+1)*length]*10).sum()
@@ -123,12 +114,10 @@ def calculation_ms(truth, prediction,dttrain,length):
         integral_parr.append(integral_p)
         mae_s.append(abs(integral_t-integral_p))
         mape_s.append(abs((integral_t-integral_p)/integral_t)*100)
-        #rmse_s.append((integral_t - integral_p) ** 2)
     integral.append(integral_tarr)
     integral.append(integral_parr)
     mae = np.mean(mae_s)
     mape = np.mean(mape_s)
-    #rmse = np.sqrt(np.mean(mape_s))
     mae_std = np.std(mae_s,ddof=1)
     mape_std = np.std(mape_s,ddof=1)
     error=[[mae,mape],[mae_std,mape_std]]
@@ -142,8 +131,6 @@ def array_operate_with_nan(array, operator):
         temp_col = array[:, i]
         means.append(operator(temp_col[temp_col == temp_col]))
     return np.array(means, dtype=np.float32)
-
-
 
 class TimeRecorder:
     def __init__(self):
@@ -237,30 +224,34 @@ def process_dataset_one(df):
 
     df = add_state_label_one(df)
     from datetime import datetime
-    beg_time_str = df['Time'].iloc[0] #取第0行数据
+    beg_time_str = df['Time'].iloc[0]
     beg_time = datetime.strptime(beg_time_str[:-3]+beg_time_str[-2:], '%Y-%m-%dT%H:%M:%S%z')
-    df['time'] = df['Time'].apply(  #按照时间按0.1每步化成序列
+    df['time'] = df['Time'].apply(
         lambda time_str: (datetime.strptime(time_str[:-3]+time_str[-2:], '%Y-%m-%dT%H:%M:%S%z')-beg_time
                           ).total_seconds()/10
     )
-    df['delta'] = df['time'][1:] - df['time'][:-1]   #为啥按索引对齐运算，以至于结果都等于0
-    df.interpolate(axis=0, method='linear', limit_direction='both', inplace=True)  #按列线性插值
+    df['delta'] = df['time'][1:] - df['time'][:-1]
+    df.interpolate(axis=0, method='linear', limit_direction='both', inplace=True)
     return df
 
 def process_dataset(df):
 
     df = add_state_label(df)
     from datetime import datetime
-    beg_time_str = df['Time'].iloc[0] #取第0行数据
+    beg_time_str = df['Time'].iloc[0]
     beg_time = datetime.strptime(beg_time_str[:-3]+beg_time_str[-2:], '%Y-%m-%dT%H:%M:%S%z')
-    df['time'] = df['Time'].apply(  #按照时间按0.1每步化成序列
+    df['time'] = df['Time'].apply(
         lambda time_str: (datetime.strptime(time_str[:-3]+time_str[-2:], '%Y-%m-%dT%H:%M:%S%z')-beg_time
                           ).total_seconds()/10
     )
-    df['delta'] = df['time'][1:] - df['time'][:-1]   #为啥按索引对齐运算，以至于结果都等于0
-    df.interpolate(axis=0, method='linear', limit_direction='both', inplace=True)  #按列线性插值
+    df['delta'] = df['time'][1:] - df['time'][:-1]
+    df.interpolate(axis=0, method='linear', limit_direction='both', inplace=True)
     return df
 
+
+class ScalarFormatterForceFormat(ScalarFormatter):
+    def _set_format(self):  # Override function that finds format to use.
+        self.format = "%1.1f"  # Give format here
 
 def visualize_prediction(Y_label, Y_pred, s_test, pserver,base_dir, seg_length=500, dir_name='visualizations'):
     assert len(Y_pred) == len(Y_label)
@@ -285,7 +276,6 @@ def visualize_prediction(Y_label, Y_pred, s_test, pserver,base_dir, seg_length=5
             plt.subplot(7, 2, i * 2 + 2)
             y_label = y_label_seg[:, i]
             y_pred = y_pred_seg[:, i]
-            # 对于one_ode 这里改成0
             for state in range(0,max_state+1):
                 indices = (s_test_seg.squeeze(axis=-1) == state)
                 scatter = plt.scatter(X[indices], y_pred[indices], label=classes[state], s=5, marker='o')
@@ -320,8 +310,56 @@ def visualize_prediction(Y_label, Y_pred, s_test, pserver,base_dir, seg_length=5
             base_dir, dir_name, '%i-%i-%i.png' % (ID, begin, begin + seg_length)
         ))
         plt.close()
-
-
+def visualize_prediction_power(Y_label, Y_pred, s_test, pserver,temperature,base_dir, seg_length=500, dir_name='visualizations'):
+    assert len(Y_pred) == len(Y_label)
+    if not os.path.exists(os.path.join(base_dir, dir_name)):
+        os.mkdir(os.path.join(base_dir, dir_name))
+    max_state = int(np.max(s_test))
+    ID = 0
+    for begin in range(0, len(Y_pred), seg_length):
+        ID += 1
+        plt.figure(figsize=(8, 5))
+        y_label_seg = Y_label[begin:min(begin + seg_length, len(Y_label))]
+        y_pred_seg = Y_pred[begin:min(begin + seg_length, len(Y_pred))]
+        s_test_seg = s_test[begin:min(begin + seg_length, len(Y_pred))]
+        #         scatter = plt.scatter(np.arange(begin, begin+len(tdf)), tdf['Power cooling'], c=tdf['states'], s=10)
+        X = np.arange(begin, begin + len(y_label_seg))
+        outputs_names = ['', '', '']
+        #outputs_names = ['Inlet temperature(℃)', 'Cooling production(w)', 'Instant cooling power(w)']
+        classes = ['unknown', 'Off', 'Start up stage 1', 'Start up stage 2', 'On']
+        ax = plt.subplot(1, 1, 1)
+        yfmt = ScalarFormatterForceFormat()
+        yfmt.set_powerlimits((0, 0))
+        ax.yaxis.set_major_formatter(yfmt)
+        ax.yaxis.get_offset_text().set_fontsize(19)
+        plt.xticks(fontsize=19)
+        plt.yticks(fontsize=19)
+        #plt.title('lower temperature limits-%d°C'%(temperature), fontsize=18)
+        y_label = y_label_seg[:, 2]
+        y_pred = y_pred_seg[:, 2]
+        for state in range(1,max_state+1):
+            indices = (s_test_seg.squeeze(axis=-1) == state)
+            # scatter = plt.scatter(X[indices], y_pred[indices],s=1,marker='o')
+            y_1 = y_pred.copy()
+            for id, v in enumerate(indices):
+                if v == False:
+                    y_1[id] = None
+            # print(y_1)
+            plt.plot(X, y_1)
+        plt.xlabel('Time(s)', fontsize=24)
+        plt.ylabel(outputs_names[2],fontsize=24)
+        #plt.legend(fontsize=21, loc = 1,labels=['Off', 'Start up stage 1', 'Start up stage 2', 'On'])
+        plt.tight_layout()
+        plt.savefig(os.path.join(
+            base_dir, dir_name, '%i-%i-%i.png' % (ID, begin, begin + seg_length)
+        ))
+        plt.savefig(os.path.join(
+            base_dir, dir_name, '%i-%i-%i.pdf' % (ID, begin, begin + seg_length)
+        ))
+        plt.savefig(os.path.join(
+            base_dir, dir_name, '%i-%i-%i.eps' % (ID, begin, begin + seg_length)
+        ),format="eps",dpi=600)
+        plt.close()
 def t2np(tensor):
     return tensor.squeeze(dim=0).detach().cpu().numpy()
 

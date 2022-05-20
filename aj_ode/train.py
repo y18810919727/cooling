@@ -12,8 +12,7 @@ by chunking into bbtt-long segments.
 """
 
 class EpochTrainer(object):
-    #前期的准备 np转cuda
-    def __init__(self, model, optimizer, epochs, X, Y, states, dt, batch_size=1, gpu=False, bptt=50,all_sqe_nums=False,
+    def __init__(self, model, optimizer, epochs, X, Y, states, dt, batch_size=1, gpu=False, bptt=50,scheme=None,all_sqe_nums=False,
                  save_dir='./', short_encoding=False, logging=None, debug=False,mymodel=None):
 
         tr = TimeRecorder()
@@ -25,7 +24,7 @@ class EpochTrainer(object):
         self.gpu = gpu
         self.Xtrain, self.Ytrain = None, None
         self.all_sqe_nums = all_sqe_nums
-
+        self.scheme = scheme
         self.bptt = bptt  # for now: constant segment length, hence constant train indices
         self.w = min(bptt, X.shape[0]//2)
         self.class_criterion = torch.nn.CrossEntropyLoss()
@@ -63,7 +62,7 @@ class EpochTrainer(object):
                 tail = self.all_sqe_nums[key][1]
                 N = tail-head
                 self.all_sqe_nums[key][0] = Xtrain.shape[0]
-                Xtrain = np.append(Xtrain, np.asarray([self.X[i + head:head + min(N, i + w), :] for i in range(max(1, N - w + 1))])).reshape(-1, 800,2)  # (instances N-w+1, w, k_in)    取数组中第i个的全部数据
+                Xtrain = np.append(Xtrain, np.asarray([self.X[i + head:head + min(N, i + w), :] for i in range(max(1, N - w + 1))])).reshape(-1, 800,2)  # (instances N-w+1, w, k_in)
                 Ytrain = np.append(Ytrain, np.asarray([self.Y[i + head:head + min(N, i + w), :] for i in range(max(1, N - w + 1))])).reshape(-1, 800,3)  # (instances N-w+1, w, k_out)
                 dttrain = np.append(dttrain, np.asarray([self.dt[i + head:head + min(N, i + w), :] for i in range(max(1, N - w + 1))])).reshape(-1, 800,1)  # (instances N-w+1, w, k_out)
                 states_train = np.append(states_train, np.asarray([self.states[i + head:head + min(N, i + w), :] for i in range(max(1, N - w + 1))])).reshape(-1, 800,1)  # (instances N-w+1, w, k_out)
@@ -92,7 +91,6 @@ class EpochTrainer(object):
             self.states_train1 = states_train1.cuda() if self.gpu else self.states_train1
 
         self.logging('preparing data: {}'.format(tr))
-    # 选出应该打乱的序列
     def random_list(self):
         train_list=[]
         for key in self.all_sqe_nums:
@@ -103,56 +101,55 @@ class EpochTrainer(object):
     def __call__(self, epoch) -> object:
         cum_bs = 0
         epoch_loss = 0.
-        np.random.shuffle(self.train_list)  # 每个下标对应一个窗口，打散
+        np.random.shuffle(self.train_list)
         train_inds = self.train_list
         tr = TimeRecorder()
         self.model.train()
         self.model.zero_grad()
-        dfa_states_classifications_pred_all = []
-        dfa_states_classifications_label_all = []
+        aj_states_classifications_pred_all = []
+        aj_states_classifications_label_all = []
 
-        for i in range(int(np.ceil(len(train_inds) / self.batch_size))):  #每次训练batch_size次窗口
+        for i in range(int(np.ceil(len(train_inds) / self.batch_size))):
             # get indices for next batch
-            iter_inds = train_inds[i * self.batch_size: (i + 1) * self.batch_size]# 提取最开始2000个batch_size
-            iter_inds_next = [x+self.w for x in iter_inds]  #把
+            iter_inds = train_inds[i * self.batch_size: (i + 1) * self.batch_size]
+            iter_inds_next = [x+self.w for x in iter_inds]
             bs = len(iter_inds)
             cum_bs += bs
-            pre_X = self.Xtrain[iter_inds, :, :]  # (batch, bptt, k_in)  #过去的xy
+            pre_X = self.Xtrain[iter_inds, :, :]  # (batch, bptt, k_in)
             pre_dt = self.dttrain[iter_inds, :, :]  # (batch, bptt, 1)
             pre_Y_target = self.Ytrain[iter_inds, :, :]
             pre_s = self.states_train[iter_inds, :, :]
-            X = self.Xtrain[iter_inds_next, :, :]  # (batch, bptt, k_in)   #未来的xy
+            X = self.Xtrain[iter_inds_next, :, :]  # (batch, bptt, k_in)
             dt = self.dttrain[iter_inds_next, :, :]  # (batch, bptt, 1)
             Y_target = self.Ytrain[iter_inds_next, :, :]
             s = self.states_train[iter_inds_next]
-
+            scheme = self.scheme
             # training
 
             self.model.train()
             self.model.zero_grad()
 
-            pre_outputs, pre_states = self.model.forward_posterior(pre_X,torch.cat([pre_X, pre_Y_target], dim=-1),dfa_states=pre_s, dt=pre_dt)
-            state0 = pre_states[:, -1]    #得到初始状态# (4000,800)
+            pre_outputs, pre_states = self.model.forward_posterior(pre_X,torch.cat([pre_X, pre_Y_target], dim=-1),aj_states=pre_s, dt=pre_dt, scheme=scheme)
+            state0 = pre_states[:, -1]
 
             with tr('forward'):
-                Y_pred, states_pred = self.model.forward_prediction(X, state0=state0, dfa_states=s, dt=dt)
+                Y_pred, states_pred = self.model.forward_prediction(X, state0=state0, aj_states=s, dt=dt)
             ht = state0[:,3:-2]
             loss_h = torch.norm(ht,p = 2,dim =1).sum()/4000
             loss_pred = self.model.criterion(
-                torch.cat([pre_outputs, Y_pred], dim=1),#
+                torch.cat([pre_outputs, Y_pred], dim=1),
                 torch.cat([pre_Y_target, Y_target], dim=1)
             )
 
             if self.mymodel != 'one':
-                # The model determines the dfa states at time t by itself based on h(t-1), state(t-1), x(t).
-                #时间预测状态
+                # The model determines the aj states at time t by itself based on h(t-1), state(t-1), x(t).
                 states_last_step = torch.cat([state0.unsqueeze(dim=1), states_pred[:,:-1, :]], dim=1)
                 yt_ht_for_state_transform = states_last_step[..., :-2]
                 cum_t_for_state_transform = states_last_step[..., -2:-1] + dt
                 s_for_state_transform = states_last_step[..., -1:]
 
                 s_cum_t_for_state_transform = torch.sigmoid(cum_t_for_state_transform)
-                all_dfa_states_tag, all_dfa_states_prob, extra_info = self.model.states_classification(
+                all_aj_states_tag, all_aj_states_prob, extra_info = self.model.states_classification(
                     torch.cat([
                         yt_ht_for_state_transform,
                         cum_t_for_state_transform,
@@ -180,26 +177,25 @@ class EpochTrainer(object):
                         extra_info['predicted_stop_cum_time'][not_null_indices]
                     )
                 else:
-                    #自动状态转换相关
                     loss_classification = self.class_criterion(
-                        all_dfa_states_prob.reshape(-1, all_dfa_states_prob.shape[-1]).contiguous(),
+                        all_aj_states_prob.reshape(-1, all_aj_states_prob.shape[-1]).contiguous(),
                         states_label.reshape(-1).contiguous(),
                     )
 
-                dfa_states_classifications_pred_all.append(all_dfa_states_tag.reshape(-1).detach().cpu())
-                dfa_states_classifications_label_all.append(states_label.reshape(-1).detach().cpu())
+                aj_states_classifications_pred_all.append(all_aj_states_tag.reshape(-1).detach().cpu())
+                aj_states_classifications_label_all.append(states_label.reshape(-1).detach().cpu())
             if self.mymodel != 'one':
                 loss = loss_classification + loss_pred+loss_h
             else:
                 loss = loss_pred+loss_h
 
             with tr('backward'):
-                loss.backward() #反向传播
+                loss.backward()
 
             # debug: observe gradients
             self.optimizer.step()
 
-            epoch_loss += loss.item() * bs #梯度下降
+            epoch_loss += loss.item() * bs
             if self.mymodel == 'one':
                 self.logging('Epoch {}, iters {}-{}, train_size {} ,loss {:.4f}, loss_pred {:.4f},time {}'.format(
                     epoch, i+1, int(np.ceil((len(train_inds)-1) / self.batch_size)), bs , float(loss.item()),

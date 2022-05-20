@@ -18,7 +18,7 @@ Ly_share: True
 odes:
 - name: unknown
   cell: gru
-  y_type: ['d', 'd', 'd']   #三输出
+  y_type: ['d', 'd', 'd']
 
 - name: closed
   cell: gru

@@ -45,7 +45,7 @@ class ODE_RNN(nn.Module):
         self.k_h = k_h
         self.name = name
         self.ode_2order = ode_2order
-        if cell == 'gru':   #目前跑的都是gru cell
+        if cell == 'gru':
             self.cell = nn.GRUCell(k_expand_in+k_in,  k_h)
         y_type = [0 if x == 'd' else x for x in y_type]
         y_type = [0 if x == 's' else x for x in y_type]
@@ -55,12 +55,12 @@ class ODE_RNN(nn.Module):
         self.func = ODE_Rnn_Func(k_h)
 
 
-    def forward(self, state, xt,dt,ti):
+    def forward(self, state, xt,dt,ti,scheme):
 
         yt, ht = state[..., :self.k_out], state[..., self.k_out:]
         t = torch.tensor([0.0, 0.1]).cuda()
         ht_ = torchdiffeq.odeint_adjoint(self.func, ht, t, rtol=0.001,
-                                        atol=0.001, method='euler')[1]
+                                        atol=0.001, method=scheme)[1]
         ht = self.cell(xt,ht_)
         yt = self.update_y(yt, ht)
         return torch.cat([yt, ht], dim=-1)
@@ -89,7 +89,7 @@ class ODEOneCell(nn.Module):
         self.Ly = Ly
         if self.ode_2order:
             assert k_h % 2 == 0, 'ode_2order=True mode requires the k_h is even.'
-        if cell == 'gru':   #目前跑的都是gru cell
+        if cell == 'gru':
             self.cell = nn.GRUCell(k_expand_in+k_in, k_h)
     def forward(self, state, xt, dt):
         yt, ht = state[..., :self.k_out], state[..., self.k_out:]
@@ -128,6 +128,7 @@ class ODEMergeCell(nn.Module):
         self.cell = nn.GRUCell(k_expand_in+k_in+k_t, k_h)
     def forward(self, state, xt, dt):
         yt, ht = state[..., :self.k_out], state[..., self.k_out:]
+
         t = torch.tensor([0.0,0.1]).cuda()
         ht=my_odeint(xt, ht, self.cell, t, adjoint=False)
         yt = self.update_y(yt, ht, dt)

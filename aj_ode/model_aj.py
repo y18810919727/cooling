@@ -5,9 +5,9 @@ import torch
 
 from common.modules import MSELoss_nan
 from torch import nn
-from dfa_ode.odes_stationary import DFA_ODENets
+from aj_ode.odes_stationary import AJ_ODENets
 
-class DFA_MIMO(nn.Module):
+class AJ_MIMO(nn.Module):
 
     def __init__(self, ode_nums, layers, k_in, k_out, k_h, y_mean, y_std, odes_para,
                  ode_2order=False, transformations=None, state_transformation_predictor=None, Ly_share=False,
@@ -23,12 +23,12 @@ class DFA_MIMO(nn.Module):
         self.cell_type = cell_type
         self.expand_input = nn.Sequential(nn.Linear(k_in, k_h), nn.Tanh())
         self.expand_input_out = nn.Sequential(nn.Linear(k_in + k_out, k_h), nn.Tanh())
-        self.dfa_odes_forward = DFA_ODENets(ode_nums, layers, k_in, k_out, k_h, y_mean, y_std,#前项预测，输入输入量做预测
+        self.aj_odes_forward = AJ_ODENets(ode_nums, layers, k_in, k_out, k_h, y_mean, y_std,
                                                   odes_para=odes_para, ode_2order=ode_2order,
                                                   state_transformation_predictor=state_transformation_predictor,
                                                   transformations_rules=transformations, cell_type=cell_type,
                                                   Ly_share=Ly_share)
-        self.dfa_odes_posterior = DFA_ODENets(ode_nums, layers, k_in, k_out, k_h, y_mean, y_std,#后验编码，输入输出量做编码
+        self.aj_odes_posterior = AJ_ODENets(ode_nums, layers, k_in, k_out, k_h, y_mean, y_std,
                                                    odes_para=odes_para, ode_2order=ode_2order,
                                                     cell_type=cell_type,
                                                     Ly_share=Ly_share)
@@ -46,7 +46,7 @@ class DFA_MIMO(nn.Module):
         else:
             xt = torch.cat([inputs, self.expand_input(inputs)], dim=-1)
 
-        new_s, new_s_prob, extra_info = self.dfa_odes_forward.state_transform(states, xt,x_in=inputs)
+        new_s, new_s_prob, extra_info = self.aj_odes_forward.state_transform(states, xt,x_in=inputs)
         if reshape:
             new_s_prob = new_s_prob.reshape(bs, l, -1)
             new_s = new_s.reshape(bs, l, -1)
@@ -56,25 +56,25 @@ class DFA_MIMO(nn.Module):
 
         return new_s, new_s_prob, extra_info
 
-    def forward_posterior(self, in_x ,inputs, state0=None, dfa_states=None, dt=None, **kwargs):  # potential kwargs: dt
+    def forward_posterior(self, in_x ,inputs, state0=None, aj_states=None, dt=None, scheme=None,**kwargs):
         return self.model_call(
-            self.dfa_odes_posterior, self.expand_input_out,in_x, inputs, state0=state0, dfa_states=dfa_states, dt=dt, **kwargs
+            self.aj_odes_posterior, self.expand_input_out,in_x, inputs, state0=state0, aj_states=aj_states, dt=dt,scheme=scheme, **kwargs
         )
 
-    def forward_prediction(self,inputs, state0=None, dfa_states=None, dt=None, **kwargs):  # potential kwargs: dt #预测
+    def forward_prediction(self,inputs, state0=None, aj_states=None, dt=None,scheme=None, **kwargs):
         return self.model_call(
-            self.dfa_odes_forward, self.expand_input,inputs,inputs, state0=state0, dfa_states=dfa_states, dt=dt, **kwargs
+            self.aj_odes_forward, self.expand_input,inputs,inputs, state0=state0, aj_states=aj_states, dt=dt,scheme=scheme, **kwargs
         )
     """
     modelcall,给定初始状态，将输入扔进去，更新状态，预测
     """
-    def model_call(self, model, expand_cell, in_x,inputs , state0=None, dfa_states=None, dt=None, **kwargs):
+    def model_call(self, model, expand_cell, in_x,inputs , state0=None, aj_states=None, dt=None, scheme=None,**kwargs):
         """
-        :param model: dfa_odes
+        :param model: aj_odes
         :param expand_cell: The model expanding inputs with size(..., k_in) to high-level feature (..., k_h)
         :param inputs:  (batch_size, seq_len, k_in)
         :param state0: The  initial state of ode nets
-        :param dfa_states: Given dfa states in each position
+        :param aj_states: Given aj states in each position
         :param dt:  (batch_size, seq_len, 1)
         :param kwargs:
         :return: outputs (bs, len, k_out), states (bs, len, k_h)
@@ -83,7 +83,7 @@ class DFA_MIMO(nn.Module):
         state = state0
         outputs = []
         states = []
-        inputs = expand_cell(inputs) #升到20维  //第一层
+        inputs = expand_cell(inputs)
         inputs = torch.cat([in_x, inputs], dim=-1)
 
         if dt is None:
@@ -93,8 +93,8 @@ class DFA_MIMO(nn.Module):
             x0 = inputs[:, i, :]
             dt_i = dt[:, i, :]
             in_x_i = in_x[:, i, :]
-            dfa_state_i = dfa_states[:, i, :] if dfa_states is not None else None
-            output, state = model(state, x0, dt=dt_i, new_s=dfa_state_i,x_in=in_x_i)
+            aj_state_i = aj_states[:, i, :] if aj_states is not None else None
+            output, state = model(state, x0, dt=dt_i, new_s=aj_state_i,x_in=in_x_i,scheme=scheme)
             outputs.append(output)
             states.append(state)
 
@@ -103,10 +103,10 @@ class DFA_MIMO(nn.Module):
 
         return outputs, states
 
-    def select_dfa_states(self, states):
-        return self.dfa_odes_forward.select_dfa_states(states)
+    def select_aj_states(self, states):
+        return self.aj_odes_forward.select_aj_states(states)
 
-    def generate_state0(self, inputs, outputs, dfa_states=None, dt=None, last=True):
+    def generate_state0(self, inputs, outputs, aj_states=None, dt=None, last=True):
         """
 
         :param in_out_seqs: bs, len, k_in+k_out
@@ -114,8 +114,7 @@ class DFA_MIMO(nn.Module):
         :param last:
         :return:
         """
-        #这里的inputs为x
-        outputs, states = self.forward_posterior(inputs,torch.cat([inputs, outputs], dim=-1), dfa_states=dfa_states, dt=dt)
+        outputs, states = self.forward_posterior(inputs,torch.cat([inputs, outputs], dim=-1), aj_states=aj_states, dt=dt)
 
         return states[:, -1] if last else states
 
@@ -133,14 +132,14 @@ class DFA_MIMO(nn.Module):
 
         assert history_s_tn.shape[1] == history_length
 
-        history_X_tn, predicted_X_tn = X_tn[:, :history_length], X_tn[:, history_length:] #过去的序列，未来的序列
-        history_dt_tn, predicted_dt_tn = dt_tn[:, :history_length], dt_tn[:, history_length:] #过去的时间间隔，未来的时间间隔
+        history_X_tn, predicted_X_tn = X_tn[:, :history_length], X_tn[:, history_length:]
+        history_dt_tn, predicted_dt_tn = dt_tn[:, :history_length], dt_tn[:, history_length:]
 
         # Y_pred, h_pred = model(X_tn, state0=htrain_pred[:, -1, :], dt=dt_tn)
         Y_pred, h_pred = self.forward_prediction(
-            predicted_X_tn,          #x_tn的后一半拿出来
-            state0=self.generate_state0(history_X_tn, history_Y_tn, history_s_tn, history_dt_tn),   #初始状态，编码模块，把过去这些东西扔进去做编码
-            dfa_states=future_s_tn,        #未来的状态
-            dt=predicted_dt_tn)            #未来的时间
+            predicted_X_tn,
+            state0=self.generate_state0(history_X_tn, history_Y_tn, history_s_tn, history_dt_tn),
+            aj_states=future_s_tn,
+            dt=predicted_dt_tn)
 
-        return Y_pred, h_pred              #返回预测结果和预测隐变量的结果
+        return Y_pred, h_pred

@@ -8,8 +8,8 @@ import traceback
 import shutil
 from time import time
 from tensorboard_logger import configure, log_value
-from dfa_ode.model_dfa import DFA_MIMO
-from dfa_ode.train import EpochTrainer
+from aj_ode.model_aj import AJ_MIMO
+from aj_ode.train import EpochTrainer
 from util import SimpleLogger, init_weights, array_operate_with_nan, get_Dataset, visualize_prediction, t2np, \
     draw_table, draw_table_all, calculation_ms,get_Dataset_one
 from datetime import timezone, timedelta,datetime
@@ -22,72 +22,44 @@ sys.path.append(parent)
 potentially varying input parameters
 """
 parser = argparse.ArgumentParser(description='Models for Continuous Stirred Tank dataset')
-
-# model definition
-methods = """
-set up model
-- model:
-    GRU (compensated GRU to avoid linear increase of state; has standard GRU as special case for Euler scheme and equidistant data)
-    GRUinc (incremental GRU, for baseline only)
-
-"""
-
-
-parser.add_argument("--test", action="store_true", help="Testing model in para.save")
-parser.add_argument("--model", type=str, default='GRU', choices=['GRU', 'GRUinc', 'ARNN', 'ARNNinc', 'DFA'])
 # model architecture
 parser.add_argument("--k_h", type=int, default=20, help="dimension of hidden state")
 # in case method == 'variable'
-RKchoices = ['Euler', 'Midpoint', 'Kutta3', 'RK4']
-parser.add_argument("--scheme", type=str, default='Euler', choices=RKchoices, help='Runge-Kutta training scheme')
+RKchoices = ['euler', 'midpoint', 'rk4']
+parser.add_argument("--scheme", type=str, default='euler', choices=RKchoices, help='Runge-Kutta training scheme')
 # training
 parser.add_argument("--batch_size", type=int, default=4000, help="batch size")
 parser.add_argument("--visualization_len", type=int, default=2000, help="The length of visualization.")
-parser.add_argument("--epochs", type=int, default=500, help="Number of epochs")
+parser.add_argument("--epochs", type=int, default=40, help="Number of epochs")
 parser.add_argument("--lr", type=float, default=0.005, help="learning rate")
 parser.add_argument("--bptt", type=int, default=800, help="bptt")
 parser.add_argument("--l2", type=float, default=0., help="L2 regularization")
 parser.add_argument("--save", type=str, default='results', help="experiment logging folder")
-parser.add_argument("--eval_epochs", type=int, default=5, help="validation every so many epochs")
+parser.add_argument("--eval_epochs", type=int, default=10, help="validation every so many epochs")
 parser.add_argument("--seed", type=int, default=None, help="random seed")
 parser.add_argument("--powertime", type=int, default=1800, help="powertime")
 
-# ODE_DFA
-parser.add_argument("--dfa_yaml", type=str, default='dfa_ns', help="The setting of dfa ode")
-parser.add_argument("--dfa_known", action="store_true",
-                    help="The states of dfa for each positions are known in test and evaluation.")
+# ODE_AJ
+parser.add_argument("--aj_yaml", type=str, default='aj_ns', help="The setting of aj ode")
+parser.add_argument("--aj_known", action="store_true",
+                    help="The states of aj for each positions are known in test and evaluation.")
 # during development
 parser.add_argument("--reset", action="store_true", help="reset even if same experiment already finished")
 parser.add_argument("--debug", action="store_true", help="debug mode, for acceleration")
 
-#数据集['Data_train_1_7_1','Data_train_1_8k','Data_train_3_8k','Data_train_4_2k','Data_validate']
-#files = ['P-1.7k.csv','P-1.85k.csv','P-3.8K.csv','P-4.2k.csv','P-6.3k.csv']
+#files = ['P-1.7k.csv','P-3.8K.csv','P-4.2k.csv','P-6.3k.csv']
+parser.add_argument("--datasets_folder", type=str, default='./data')
 parser.add_argument("--datasets", type=list, default=['P-1.7k','P-3.8k','P-4.2k','P-6.3k'], help="datasets")
-parser.add_argument("--describe", type=str, default="改ode那部分 ", help="describe")
 parser.add_argument("--mymodel", type=str, default='merge', choices=['merge', 'rnn', 'one'])
-
 paras = parser.parse_args()
-
 hard_reset = paras.reset
-"""
-results文件夹生成目录
-"""
+
+datasets_folder = paras.datasets_folder
 # if paras.save already exists and contains log.txt:
 # reset if not finished, or if hard_reset
-paras.save = os.path.join('results', paras.save) #路径拼接，改变paras.save为'results/tmp'
-if paras.test:
-    '''
-    20220417
-    '''
-    model_test_path = os.path.join(paras.save, 'best_dev_model_200.pt')
-    # paras.save = os.path.join(paras.save, 'test')
-    # if not os.path.exists(paras.save):
-    #     os.mkdir(paras.save)
-    # paras.eval_epochs = 10
-    # paras.epochs = 10
-
+paras.save = os.path.join('results', paras.save)
 log_file = os.path.join(paras.save, 'log.txt')
-if os.path.isfile(log_file) and not paras.test:  #判断是否为文件
+if os.path.isfile(log_file):
     with open(log_file, 'r', encoding='utf-8', errors='ignore') as f:
         content = f.read()
         completed = 'Finished' in content
@@ -95,7 +67,7 @@ if os.path.isfile(log_file) and not paras.test:  #判断是否为文件
             print('Exit; already completed and no hard reset asked.')
             sys.exit()  # do not overwrite folder with current experiment
         else:  # reset folder
-            shutil.rmtree(paras.save, ignore_errors=True) #递归地删除文件夹
+            shutil.rmtree(paras.save, ignore_errors=True)
 
 
 
@@ -108,21 +80,15 @@ logging('Args: {}'.format(paras))
 
 beijing = timezone(timedelta(hours=8))
 time_beijing = datetime.utcnow().astimezone(beijing)
-aim = paras.describe
-describe = "实验时间:{}\n实验目的:{}\n".format(time_beijing,aim)
-logging('\n实验描述', '\n{}'.format(describe))
+
 
 """
 fixed input parameters
-"""
-"""
-目前测试集和验证集是一样的，没有分开
 """
 GPU = torch.cuda.is_available()
 logging('Using GPU?', GPU)
 
 # set random seed for reproducibility
-#设置模型的随机数种子
 if paras.seed is None:
     paras.seed = np.random.randint(1000000)
 torch.manual_seed(paras.seed)
@@ -135,19 +101,13 @@ logging('Random seed', paras.seed)
 """
 Load data
 """
-"""
-分为debug和非debug模式的训练集和测试集文件
-"""
+
 datasets = paras.datasets
 all_sqe_nums = {}
 len_sqe = []
 if paras.debug: # Using short dataset for acceleration
-    if paras.mymodel == 'one':
-        Xtrain, Ytrain, ttrain, strain = [df.to_numpy(dtype=np.float32) for df in get_Dataset_one('./mydata2/train_P-1.7k.csv')]
-        Xdev, Ydev, tdev, sdev = [df.to_numpy(dtype=np.float32) for df in get_Dataset_one('./mydata2/P-1.7k.csv')]
-    else:
-        Xtrain, Ytrain, ttrain, strain = [df.to_numpy(dtype=np.float32) for df in get_Dataset('./mydata2/train_P-1.7k.csv')]
-        Xdev, Ydev, tdev, sdev = [df.to_numpy(dtype=np.float32) for df in get_Dataset('./mydata2/P-1.7k.csv')]
+    Xtrain, Ytrain, ttrain, strain = [df.to_numpy(dtype=np.float32) for df in get_Dataset(datasets_folder+'/train_P-1.7k.csv')]
+    Xdev, Ydev, tdev, sdev = [df.to_numpy(dtype=np.float32) for df in get_Dataset(datasets_folder+'/P-1.7k.csv')]
     len_sqe.append(0)
     len_sqe.append(int(Xtrain.size / 2))
     all_sqe_nums['train'] =len_sqe
@@ -161,26 +121,26 @@ else:
         len_sqe = []
         len_sqe.append(int(Xtrain.size/2))
         if paras.mymodel == 'one':
-            X, Y, t, s = [df.to_numpy(dtype=np.float32) for df in get_Dataset_one('./mydata2/train_' + everdata + '.csv')]
+            X, Y, t, s = [df.to_numpy(dtype=np.float32) for df in get_Dataset_one(datasets_folder+'/train_' + everdata + '.csv')]
         else:
-            X, Y, t, s = [df.to_numpy(dtype=np.float32) for df in get_Dataset('./mydata2/train_'+everdata+'.csv')]
+            X, Y, t, s = [df.to_numpy(dtype=np.float32) for df in get_Dataset(datasets_folder+'/train_'+everdata+'.csv')]
         Xtrain = np.append(Xtrain,X).reshape(-1, 2)
         Ytrain = np.append(Ytrain,Y).reshape(-1, 3)
         ttrain = np.append(ttrain,t).reshape(-1, 1)
         strain = np.append(strain,s).reshape(-1, 1)
         len_sqe.append(int(Xtrain.size / 2))
-        all_sqe_nums[everdata] = len_sqe    #每个数据集的范围
+        all_sqe_nums[everdata] = len_sqe
 
-#dt时间间隔
-dttrain = np.append(ttrain[1:] - ttrain[:-1], ttrain[1]-ttrain[0]).reshape(-1, 1)  #化为1列,从1到最后减去从0到
+
+dttrain = np.append(ttrain[1:] - ttrain[:-1], ttrain[1]-ttrain[0]).reshape(-1, 1)
 dttrain[dttrain < -0.1] = 0.1
 
 
-k_in = Xtrain.shape[1]  #输入2维
-k_out = Ytrain.shape[1] #输出3维
+k_in = Xtrain.shape[1]
+k_out = Ytrain.shape[1]
 
 
-Ntrain = Xtrain.shape[0]  #序列长度
+Ntrain = Xtrain.shape[0]
 
 
 """
@@ -202,40 +162,38 @@ def prediction_error(truth, prediction):
 
 
 
-#算均值和标准差，神经网络输入之前需要把数据做归一化
 Y_mean, Y_std = array_operate_with_nan(Ytrain, np.mean), array_operate_with_nan(Ytrain, np.std)
-Ytrain = (Ytrain - Y_mean) / Y_std    #标准化处理
+Ytrain = (Ytrain - Y_mean) / Y_std
 
 X_mean, X_std = array_operate_with_nan(Xtrain, np.mean), array_operate_with_nan(Xtrain, np.std)
 Xtrain = (Xtrain - X_mean) / X_std
 dt_mean = np.mean(dttrain)
 
 
-# set model:
-if not paras.test:
-    # Generating a new model
-    import yaml
-    fs = open('./dfa_ode/transformations/{}.yaml'.format(paras.dfa_yaml), encoding='UTF-8', mode='r')
-    dfa_setting = yaml.load(fs, Loader=yaml.FullLoader)
-
-    model = DFA_MIMO(dfa_setting['ode_nums'], 1, k_in, k_out, paras.k_h, y_mean=Y_mean, y_std=Y_std,
-                     odes_para=dfa_setting['odes'],
-                     ode_2order=dfa_setting['ode_2order'],
-                     transformations=dfa_setting['transformations'],
-                     state_transformation_predictor=dfa_setting['predictors'], cell_type=paras.mymodel,
-                     Ly_share=dfa_setting['Ly_share'])
-
-    model.apply(init_weights)
-else:
-    model = torch.load(model_test_path)
 
 
-#转到cuda
+# Generating a new model
+import yaml
+fs = open('./aj_ode/transformations/{}.yaml'.format(paras.aj_yaml), encoding='UTF-8', mode='r')
+aj_setting = yaml.load(fs, Loader=yaml.FullLoader)
+
+model = AJ_MIMO(aj_setting['ode_nums'], 1, k_in, k_out, paras.k_h, y_mean=Y_mean, y_std=Y_std,
+                 odes_para=aj_setting['odes'],
+                 ode_2order=aj_setting['ode_2order'],
+                 transformations=aj_setting['transformations'],
+                 state_transformation_predictor=aj_setting['predictors'], cell_type=paras.mymodel,
+                 Ly_share=aj_setting['Ly_share'])
+
+model.apply(init_weights)
+
+
+
+
 if GPU:
     model = model.cuda()
 
-params = sum([np.prod(p.size()) for p in model.parameters()])  #提取该model所有权重参数总量
-logging('\nModel %s (scheme %s) with %d trainable parameters' % (paras.model, paras.scheme, params))
+params = sum([np.prod(p.size()) for p in model.parameters()])
+logging('\n(scheme %s) with %d trainable parameters' % (paras.scheme, params))
 for n, p in model.named_parameters():
     p_params = np.prod(p.size())
     print('\t%s\t%d (cuda: %s)'%(n, p_params, str(p.is_cuda)))
@@ -243,15 +201,14 @@ for n, p in model.named_parameters():
 logging('Architecture: ', model)
 log_value('model/params', params, 0)
 
-optimizer = torch.optim.Adam(model.parameters(), lr=paras.lr, weight_decay=paras.l2)  #优化算法
+optimizer = torch.optim.Adam(model.parameters(), lr=paras.lr, weight_decay=paras.l2)
 
 
-#构建训练器，把训练的代码封装成一个类
+
 trainer = EpochTrainer(model, optimizer, paras.epochs, Xtrain, Ytrain, strain, dttrain,
-                       batch_size=paras.batch_size, gpu=GPU, bptt=paras.bptt,all_sqe_nums=all_sqe_nums, save_dir=paras.save,
+                       batch_size=paras.batch_size, gpu=GPU, bptt=paras.bptt,scheme=paras.scheme,all_sqe_nums=all_sqe_nums, save_dir=paras.save,
                        logging=logging, debug=paras.debug,mymodel = paras.mymodel)  #dttrain ignored for all but 'variable' methods
 t00 = time()
-#参数，每训练10轮做一次评估，
 best_dev_error = 1.e5
 best_dev_epoch = 1
 error_test = -1
@@ -262,38 +219,31 @@ max_epochs_no_decrease = 50  # If error in dev does not decrease in long time, t
 try:  # catch error and redirect to logger
 
     for epoch in range(1, paras.epochs + 1):
-        mse_train = trainer(epoch) #训练
-        #torch.save(model, os.path.join(paras.save, 'best_dev_model_{}.pt'.format(epoch)))  # 存最好的模型
+        mse_train = trainer(epoch)
         if epoch % paras.eval_epochs == 0:
-            with torch.no_grad(): #验证  停止梯度计算
-                model.eval()      #测试
-                # (1) forecast on train data steps
-                """
-                拿系统过去的信息，得到初始状态，联合未来的输入做预测
-                """
+            with torch.no_grad():
+                model.eval()
                 error_dev_sum = 0
                 # corresponding test result:
                 for everdata in datasets:
                     if paras.mymodel == 'one':
                         X, Y, t, s = [df.to_numpy(dtype=np.float32) for df in
-                                      get_Dataset_one('./mydata2/train_' + everdata + '.csv')]
+                                      get_Dataset_one(datasets_folder+'/train_' + everdata + '.csv')]
                     else:
                         X, Y, t, s = [df.to_numpy(dtype=np.float32) for df in
-                                      get_Dataset('./mydata2/train_' + everdata + '.csv')]
+                                      get_Dataset(datasets_folder+'/train_' + everdata + '.csv')]
                     if paras.mymodel == 'one':
-                        Xtrain, Ytrain, ttrain, strain = [df.to_numpy(dtype=np.float32) for df in get_Dataset_one('./mydata2/train_'+everdata+'.csv')]
-                        Xdev, Ydev, tdev, sdev = [df.to_numpy(dtype=np.float32) for df in get_Dataset_one('./mydata2/'+everdata+'.csv')]  #验证集也改为和测试集一样
+                        Xtrain, Ytrain, ttrain, strain = [df.to_numpy(dtype=np.float32) for df in get_Dataset_one(datasets_folder+'/train_'+everdata+'.csv')]
+                        Xdev, Ydev, tdev, sdev = [df.to_numpy(dtype=np.float32) for df in get_Dataset_one(datasets_folder+'/'+everdata+'.csv')]
                     else:
                         Xtrain, Ytrain, ttrain, strain = [df.to_numpy(dtype=np.float32) for df in
-                                                          get_Dataset('./mydata2/train_' + everdata + '.csv')]
+                                                          get_Dataset(datasets_folder+'/train_' + everdata + '.csv')]
                         Xdev, Ydev, tdev, sdev = [df.to_numpy(dtype=np.float32) for df in
-                                                  get_Dataset('./mydata2/' + everdata + '.csv')]  # 验证集也改为和测试集一样
+                                                  get_Dataset(datasets_folder+'/' + everdata + '.csv')]
 
-                    dttrain = np.append(ttrain[1:] - ttrain[:-1], ttrain[1] - ttrain[0]).reshape(-1,1)  # 化为1列,从1到最后减去从0到
-
-
+                    dttrain = np.append(ttrain[1:] - ttrain[:-1], ttrain[1] - ttrain[0]).reshape(-1,1)
                     dtdev = np.append(tdev[1:] - tdev[:-1], tdev[1] - tdev[0]).reshape(-1, 1)
-                    Ytrain, Ydev = [(Y - Y_mean) / Y_std for Y in [Ytrain, Ydev]]  # 标准化处理
+                    Ytrain, Ydev = [(Y - Y_mean) / Y_std for Y in [Ytrain, Ydev]]
                     Xtrain, Xdev = [(X - X_mean) / X_std for X in [Xtrain, Xdev]]
 
                     Xtrain_tn = torch.tensor(Xtrain, dtype=torch.float).unsqueeze(0)  # (1, Ntrain, k_in)
@@ -317,9 +267,6 @@ try:  # catch error and redirect to logger
                         Xtrain_tn,  dttrain_tn,  Ytrain_tn[:, :paras.bptt], strain_tn[:, :paras.bptt], paras.bptt,
                         strain_tn[:, paras.bptt:])
                     error_train = prediction_error(Ytrain[paras.bptt:], t2np(Ytrain_pred))
-                    """
-                    训练集做个预测，得到指标画个图
-                    """
 
                     if not os.path.exists('{}/predict_seq'.format(paras.save)):
                         os.mkdir('{}/predict_seq'.format(paras.save))
@@ -335,42 +282,19 @@ try:  # catch error and redirect to logger
                     Ydev_pred, hdev_pred = model.encoding_plus_predict(
                         Xdev_tn,  dtdev_tn,  Ydev_tn[:, :paras.bptt], sdev_tn[:, :paras.bptt], paras.bptt,
                         sdev_tn[:, paras.bptt:])
-                    #error_train = prediction_error(Ytrain[paras.bptt:], t2np(Ytrain_pred))
-                    """
-                    验证集做个预测，算到指标打个日志
-                    """
                     mse_dev = model.criterion(Ydev_pred, Ydev_tn[:, paras.bptt:]).item()
                     error_dev = prediction_error(Ydev[paras.bptt:], t2np(Ydev_pred))
                     error_dev_sum += error_dev
                     logging(
                         'epoch %04d |%s| rrse %d '%(epoch, everdata,error_dev))
-                    dev_path = os.path.join(paras.save, 'predict_seq/visualizations-dev-{}'.format(epoch))  # 分别创建文件夹
+                    dev_path = os.path.join(paras.save, 'predict_seq/visualizations-dev-{}'.format(epoch))
                     if not os.path.exists(dev_path):
                         os.mkdir(dev_path)
-                    # 画验证集
                     visualize_prediction(
                         Ydev[paras.bptt:] * Y_std + Y_mean, t2np(Ydev_pred) * Y_std + Y_mean, sdev[paras.bptt:],Xdev[paras.bptt:,0]* X_std[0] + X_mean[0],
-                        # stest状态标签
                         os.path.join(paras.save, 'predict_seq'),
                         seg_length=paras.visualization_len, dir_name='visualizations-dev-%s/%s' %( str(epoch), everdata))
-
-                    predict_result = os.path.join(paras.save, 'predict_result/')
-                    if not os.path.exists(predict_result):
-                        os.mkdir(predict_result)
-                    dev_result = os.path.join(predict_result, 'dev/')
-                    if not os.path.exists(dev_result):
-                        os.mkdir(dev_result)
-                    dev_result2 = os.path.join(dev_result, 'epoch_%s'%(str(epoch)))
-                    if not os.path.exists(dev_result2):
-                        os.mkdir(dev_result2)
-                    pickle.dump(
-                        {'t_tdev': tdev, 'y_target_dev': Ydev, 'y_pred_dev': t2np(Ydev_pred), 'x_dev': Xdev,
-                         'sdev': sdev[paras.bptt:],
-                         'Y_mean': Y_mean, 'Y_std': Y_std, 'X_mean': X_mean, 'X_std': X_std},
-                        open(os.path.join(dev_result2, 'datafigs_{}.pkl'.format(everdata)), 'wb'))
                 logging('epoch %04d| rrse_all %d ' % (epoch, error_dev_sum))
-                #验证集上，如果误差比最好的要小
-                #验证集上达到一个最好的效果，拿测试集做预测，看效果
                 # update best dev model
                 if error_dev_sum < best_dev_error:
                     best_dev_error = error_dev_sum
@@ -385,10 +309,10 @@ try:  # catch error and redirect to logger
 
                         if paras.mymodel == 'one':
                             Xtest, Ytest, ttest, stest = [df.to_numpy(dtype=np.float32) for df in
-                                                  get_Dataset_one('./mydata2/'+everdata+'.csv')]
+                                                  get_Dataset_one(datasets_folder+'/'+everdata+'.csv')]
                         else:
                             Xtest, Ytest, ttest, stest = [df.to_numpy(dtype=np.float32) for df in
-                                                          get_Dataset('./mydata2/' + everdata + '.csv')]
+                                                          get_Dataset(datasets_folder+'/' + everdata + '.csv')]
                         dttest = np.append(ttest[1:] - ttest[:-1], ttest[1] - ttest[0]).reshape(-1, 1)
                         Ytest = (Ytest - Y_mean) / Y_std
                         Xtest = (Xtest - X_mean) / X_std
@@ -406,19 +330,15 @@ try:  # catch error and redirect to logger
 
                         Ytest_pred, test_state_pred = model.encoding_plus_predict(
                             Xtest_tn,  dttest_tn,  Ytest_tn[:, :paras.bptt], stest_tn[:, :paras.bptt], paras.bptt,
-                            stest_tn[:, paras.bptt:] if paras.dfa_known else None)
-                        # mse_test = model.criterion(Ytest_pred, Ytest_tn[paras.bptt:]).item()
-                        #根据预测的结果，看一下模型每个时间点的状态分类
-                        test_dfa_state_pred_array = model.select_dfa_states(test_state_pred[0]).int().detach().cpu().numpy()
-                        #log_value('test/corresp_error', error_test, epoch)
+                            stest_tn[:, paras.bptt:] if paras.aj_known else None)
+                        test_aj_state_pred_array = model.select_aj_states(test_state_pred[0]).int().detach().cpu().numpy()
                         predict_path = os.path.join(paras.save, 'predict_seq/visualizations-test-{}'.format(epoch))
                         if not os.path.exists(predict_path):
                             os.mkdir(predict_path)
-                        #画图可视化出来，画测试集
                         visualize_prediction(
-                            Ytest[paras.bptt:] * Y_std + Y_mean, t2np(Ytest_pred) * Y_std + Y_mean, test_dfa_state_pred_array,Xtest[paras.bptt:,0]* X_std[0] + X_mean[0],
+                            Ytest[paras.bptt:] * Y_std + Y_mean, t2np(Ytest_pred) * Y_std + Y_mean, test_aj_state_pred_array,Xtest[paras.bptt:,0]* X_std[0] + X_mean[0],
                             os.path.join(paras.save, 'predict_seq'),
-                            seg_length=paras.visualization_len, dir_name='visualizations-test-%s/%s' % (str(best_dev_epoch) , everdata))# 模型自己预测的
+                            seg_length=paras.visualization_len, dir_name='visualizations-test-%s/%s' % (str(best_dev_epoch) , everdata))
 
                         integral,error = calculation_ms(Ytest[paras.bptt:, 2] * Y_std[2] + Y_mean[2],
                                           t2np(Ytest_pred)[:, 2] * Y_std[2] + Y_mean[2],dttest,paras.powertime)
@@ -427,22 +347,7 @@ try:  # catch error and redirect to logger
                             draw_table(everdata, integral, error, paras.powertime,  os.path.join(paras.save, 'predict_seq'), dir_name='visualizations-test-%s/%s' % (str(best_dev_epoch) , everdata))
                         error_all_mae.append(str(error[0][0])+" ± "+str(error[1][0]))
                         error_all_mape.append(str(error[0][1])+" ± "+str(error[1][1]))
-                        torch.save(model, os.path.join(paras.save, 'best_dev_model_{}.pt'.format(epoch)))  #存最好的模型
-                        predict_result = os.path.join(paras.save, 'predict_result/')
-                        if not os.path.exists(predict_result):
-                            os.mkdir(predict_result)
-
-                        predict_result = os.path.join(predict_result, 'test/')
-                        if not os.path.exists(predict_result):
-                            os.mkdir(predict_result)
-                        pickle.dump({'t_test': ttest, 'y_target_test': Ytest, 'y_pred_test': t2np(Ytest_pred),'x_test':Xtest,'test_dfa_state_pred_array':test_dfa_state_pred_array,
-                                     'Y_mean':Y_mean,'Y_std':Y_std,'X_mean':X_mean,'X_std':X_std},
-                                    open(os.path.join(predict_result, 'datafigs_{}.pkl'.format(everdata)), 'wb'))
-
-                        dev_result_best = os.path.join(dev_result, 'epoch_%s' % (str(best_dev_epoch)))
-                        file = os.path.join(dev_result_best, 'datafigs_{}.pkl'.format(everdata))
-                        shutil.copy(file, dev_result)
-
+                    torch.save(model, os.path.join(paras.save, 'best_dev_model.pt'))
                     error_all=[error_all_mae,error_all_mape]
                     draw_table_all(datasets, error_all , os.path.join(paras.save, 'predict_seq'))
                 elif epoch - best_dev_epoch > max_epochs_no_decrease:

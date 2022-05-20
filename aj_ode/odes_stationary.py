@@ -1,12 +1,12 @@
 #!/usr/bin/python
 # -*- coding:utf8 -*-
 import torch
-from dfa_ode.modules import Predictor, ODEMergeCell,ODE_RNN,ODEOneCell
+from aj_ode.modules import Predictor, ODEMergeCell,ODE_RNN,ODEOneCell
 from torch import nn
 from collections import defaultdict
 
 
-class DFA_ODENets(nn.Module):
+class AJ_ODENets(nn.Module):
     def __init__(self, ode_nums, layers, k_in, k_out, k_h, y_mean, y_std, odes_para, ode_2order, state_transformation_predictor=None,
                  transformations_rules=None, cell_type='cde', linear_decoder=False, Ly_share=False):
         super().__init__()
@@ -21,7 +21,7 @@ class DFA_ODENets(nn.Module):
         self.linear_decoder = linear_decoder
         self.y_mean = nn.Parameter(torch.FloatTensor(y_mean), requires_grad=False)
         self.y_std = nn.Parameter(torch.FloatTensor(y_std), requires_grad=False)
-        if cell_type == 'merge':   #odecell 每个ode的cell
+        if cell_type == 'merge':
             ODECellClass = ODEMergeCell
         elif cell_type == 'rnn':
             ODECellClass = ODE_RNN
@@ -29,9 +29,6 @@ class DFA_ODENets(nn.Module):
             ODECellClass = ODEOneCell
         else:
             raise NotImplementedError('Cell %s is not implemented' % cell_type)
-
-        #时间预测器，有(cat(xt升维,xt), state , xt)
-        #ode中有ht,cat(xt升维,xt,cum_t),dt,s
         if cell_type == 'merge':
             Ly = self.make_decoder(k_h , k_out) if Ly_share else None
             self.odes = nn.ModuleList([ODECellClass(
@@ -51,8 +48,6 @@ class DFA_ODENets(nn.Module):
                     else:
                         raise NotImplementedError
 
-        #时间预测器，有(cat(xt升维,xt), state , xt)
-        #ode中有ht,cat(xt升维,xt),dt,s,cum_t
         elif cell_type == 'rnn':
             Ly = self.make_decoder_not_t(k_h, k_out) if Ly_share else None
             self.odes = nn.ModuleList([ODECellClass(
@@ -72,7 +67,6 @@ class DFA_ODENets(nn.Module):
                     else:
                         raise NotImplementedError
 
-        #ode中有ht, cat(xt升维, xt), dt, s
         elif cell_type == 'one':
             Ly = self.make_decoder_not_t(k_h, k_out) if Ly_share else None
             self.odes = nn.ModuleList([ODECellClass(
@@ -81,7 +75,7 @@ class DFA_ODENets(nn.Module):
             ) for para in odes_para])
 
         if transformations_rules is not None:
-            for t in transformations_rules:   #遍历所有转移规则
+            for t in transformations_rules:
                 self.add_transform(t['from'], t['to'], t['rules'])
 
     def make_decoder(self, k_h, k_out):
@@ -105,9 +99,9 @@ class DFA_ODENets(nn.Module):
                 nn.Linear(k_h* 2, k_out)
             )
         return Ly
-    def add_transform(self, s1, s2, rules):   # 读文件，加转移规则
+    def add_transform(self, s1, s2, rules):
         """
-        Generating a transformation in DFA
+        Generating a transformation in AJ
         :param s1:
         :param s2:
         :param rules:
@@ -137,7 +131,7 @@ class DFA_ODENets(nn.Module):
         :return: news (batch_size, 1)
         """
         # ht, cum_t, s1 = state[:, :-2], state[:, -2:-1], state[:, -1].long()
-        ht, cum_t, s1 = self.select_ht(state), self.select_cum_t(state), self.select_dfa_states(state).squeeze(dim=-1).long()
+        ht, cum_t, s1 = self.select_ht(state), self.select_cum_t(state), self.select_aj_states(state).squeeze(dim=-1).long()
         new_s = s1.clone().detach()
         new_s_prob = torch.zeros((s1.shape[0], self.ode_nums), device=state.device)
         extra_info = {}
@@ -152,23 +146,23 @@ class DFA_ODENets(nn.Module):
                     if 'predicted_stop_cum_time' not in extra_info.keys():
                         extra_info['predicted_stop_cum_time'] = torch.zeros_like(cum_t) * float('nan')
                         extra_info['real_cum_time'] = cum_t
-                    if x_in == None:#时间预测器中不加x
-                        predicted_cum_t = predictor(xt[chosen_indices],ht[chosen_indices]) #新加x为输入
+                    if x_in == None:
+                        predicted_cum_t = predictor(xt[chosen_indices],ht[chosen_indices])
                     else:
-                        predicted_cum_t = predictor(xt[chosen_indices],torch.cat([ht[chosen_indices], x_in[chosen_indices]],dim=-1))  # 新加x为输入
+                        predicted_cum_t = predictor(xt[chosen_indices],torch.cat([ht[chosen_indices], x_in[chosen_indices]],dim=-1))
                     indices_time_out = (predicted_cum_t.squeeze(dim=-1) <= cum_t[chosen_indices].squeeze(dim=-1))
                     indices_time_out = chosen_indices[indices_time_out]
 
                     extra_info['predicted_stop_cum_time'][chosen_indices] = predicted_cum_t
                     state_index_plus_one = (state_index + 1) % self.ode_nums
-                    if state_index_plus_one == 0:   #状态加1
+                    if state_index_plus_one == 0:
                         state_index_plus_one = 1
 
                     new_s[indices_time_out] = state_index_plus_one
                     new_s_prob[indices_time_out, state_index_plus_one] = 1.0
-            else:  #规则转换
+            else:
                 # If there is no Classification network in state_transformation_predictor,
-                # applying the DFA rules for transformations.
+                # applying the AJ rules for transformations.
                 with torch.no_grad():
                     y = self.decode_y(state) * self.y_std + self.y_mean
                 chosen_states = new_s[chosen_indices]
@@ -191,7 +185,7 @@ class DFA_ODENets(nn.Module):
                     new_s[chosen_indices[boolean_results]] = s2
                     new_s_prob[chosen_indices[boolean_results], s2] = 1.0
 
-        return new_s.unsqueeze(dim=-1), new_s_prob, extra_info #返回新的状态
+        return new_s.unsqueeze(dim=-1), new_s_prob, extra_info
 
     def decode_y(self, state):
         return state[..., :self.k_out]
@@ -204,35 +198,35 @@ class DFA_ODENets(nn.Module):
         return state[..., -2:-1]
 
     @staticmethod
-    def select_dfa_states(states):
+    def select_aj_states(states):
         return states[:, -1:]
 
-    def combinational_ode(self, s, ht, xt, dt): #对于不同的状态，找对应的ode 用的欧拉法
+    def combinational_ode(self, s, ht, xt, dt,scheme):
         nht = torch.zeros_like(ht)
         for i in range(self.ode_nums):
-            indices = (s.squeeze(dim=-1) == i) #判断是哪个状态
+            indices = (s.squeeze(dim=-1) == i)
             if torch.any(indices):
                 nht[indices] = self.odes[i](ht[indices], xt[indices], dt[indices])
         return nht
 
-    def Rnn_ode(self, s, ht, xt,dt,s_cum_t): #对于不同的状态，找对应的ode
+    def Rnn_ode(self, s, ht, xt,dt,s_cum_t,scheme):
         nht = torch.zeros_like(ht)
         for i in range(self.ode_nums):
-            indices = (s.squeeze(dim=-1) == i) #判断是哪个状态
+            indices = (s.squeeze(dim=-1) == i)
             if torch.any(indices):
-                nht[indices] = self.odes[i](ht[indices], xt[indices], dt[indices],s_cum_t[indices])
+                nht[indices] = self.odes[i](ht[indices], xt[indices], dt[indices],s_cum_t[indices],scheme)
         return nht
 
-    def One_ode(self, s, ht, xt, dt): #对于不同的状态，找对应的ode
+    def One_ode(self, s, ht, xt, dt,scheme):
         nht = torch.zeros_like(ht)
         for i in range(self.ode_nums):
-            indices = (s.squeeze(dim=-1) == i) #判断是哪个状态
+            indices = (s.squeeze(dim=-1) == i)
             if torch.any(indices):
                 nht[indices] = self.odes[i](ht[indices], xt[indices], dt[indices])
         return nht
 
 
-    def forward(self, state, xt, dt,new_s=None,x_in=None):  #给xt,dt预测新的输出或者state
+    def forward(self, state, xt, dt,new_s=None,x_in=None,scheme=None):
         """
 
         :param state: The concatenation of ht, cum_t, cur_s : (bs, k_h + 2)
@@ -241,7 +235,7 @@ class DFA_ODENets(nn.Module):
         :param new_s: (bs, 1)
         :return:
         """
-        if self.cell_type == 'merge':  # odecell 每个ode的cell
+        if self.cell_type == 'merge':
             state = torch.zeros((xt.shape[0],  self.k_h+self.k_out+self.k_t+self.k_s), device=xt.device) if state is None else state
         else:
             state = torch.zeros((xt.shape[0], self.k_h+self.k_out+self.k_t+self.k_s),
@@ -250,12 +244,12 @@ class DFA_ODENets(nn.Module):
         s_cum_t = torch.sigmoid(cum_t)
         xt_t = torch.cat([s_cum_t,xt], dim=-1)
 
-        if self.cell_type == 'merge':   #odecell 每个ode的cell
-            new_ht = self.combinational_ode(s, ht, xt_t , dt)
+        if self.cell_type == 'merge':
+            new_ht = self.combinational_ode(s, ht, xt_t ,dt,scheme)
         elif self.cell_type == 'rnn':
-            new_ht = self.Rnn_ode(s, ht, xt ,dt,s_cum_t)
+            new_ht = self.Rnn_ode(s, ht, xt ,dt,s_cum_t,scheme)
         elif self.cell_type == 'one':
-            new_ht = self.One_ode(s, ht, xt , dt)
+            new_ht = self.One_ode(s, ht, xt , dt,scheme)
 
         new_cum_t = cum_t + dt
 
@@ -274,7 +268,7 @@ class DFA_ODENets(nn.Module):
         if new_s is None and self.cell_type == 'one':
             new_s = torch.tensor([[0]], dtype=torch.int).cuda()
 
-        updated_indices = (s.squeeze(dim=-1) != new_s.squeeze(dim=-1))  # 更新下标，如果状态转移，那么那个状态的下标页转为0
+        updated_indices = (s.squeeze(dim=-1) != new_s.squeeze(dim=-1))
         new_cum_t[updated_indices] = 0
 
         return self.decode_y(new_ht), torch.cat([new_ht, new_cum_t, new_s.float()], dim=-1)

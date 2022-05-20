@@ -6,42 +6,33 @@ import os
 import json
 from collections import defaultdict
 import pandas as pd
-from util import get_Dataset, t2np, SimpleLogger,visualize_prediction_power2
+from util import get_Dataset, visualize_prediction, array_operate_with_nan, t2np, SimpleLogger,visualize_prediction_power,visualize_prediction_power
 
 import torch
 import argparse
 import pickle
-from matplotlib import pyplot as plt  # 画图
+from matplotlib import pyplot as plt
 parser = argparse.ArgumentParser(description='Models for Continuous Stirred Tank dataset')
-
-# model definition
-methods = """
-"""
-
-
 parser.add_argument("--low", type=float, default=12, help='The temperature activating the work of cooling')
 parser.add_argument("--high", type=float, default=20, help='The temperature stopping the cooling system')
-parser.add_argument("--model", type=str, default='best_dev_model-Copy1')
-parser.add_argument("--interpol", type=str, default='constant', choices=['constant', 'linear'])
+parser.add_argument("--model", type=str, default='best_dev_model.pt')
 parser.add_argument("--bptt", type=int, default=800, help="bptt")
 parser.add_argument("--data", type=str, default='test.csv')
 parser.add_argument("--save_dir", type=str, default='None')
-#数据集
-parser.add_argument("--datasets", type=list, default=['P-1.7k','P-3.8k','P-6.3k'], help="datasets")
+parser.add_argument("--datasets", type=list, default=['train_P-1.7k','train_P-3.8k','train_P-6.3k'], help="datasets")
 parser.add_argument("--datasets2", type=list, default=['heat load-1.7k','heat load-3.8k','heat load-6.3k'], help="datasets")
-parser.add_argument("--datasets3", type=list, default=['1.7k','3.8k','6.3k'], help="datasets")
+
 
 if __name__ == '__main__':
 
     paras = parser.parse_args()
     paras.save_dir = os.path.join('results', paras.save_dir)
-    save_dir_img = os.path.join(paras.save_dir,'optimization2')
+    save_dir_img = os.path.join(paras.save_dir,'optimization')
     if not os.path.exists(save_dir_img):
         os.mkdir(save_dir_img)
     log_file_all = os.path.join(save_dir_img, 'all.txt' )
     logging_all = SimpleLogger(log_file_all)  # log to file
-    # 导入入归一化值
-    filename = "./optimization/1116.pkl"
+    filename = "./result/optimization_test/data.pkl"
     file = open(filename, "rb")
     data = pickle.load(file)
     X_mean = data['X_mean']
@@ -50,13 +41,14 @@ if __name__ == '__main__':
     Y_std = data['Y_std']
 
     sum_powers_all = []
-
+    cops_all = []
+    pue_all = []
     for idx,everdata in enumerate(paras.datasets):
-
-        sum_powers = []  # 遍历从min到max 制冷功率
-        sum_pcooling_powers = []                #制冷量
+        sum_powers = []
+        cops = []
+        pues = []
         Min = 12
-        Max = 19
+        Max = 18.5
         step = 0.5
         Xtest, Ytest, ttest, stest = [df.to_numpy(dtype=np.float32) for df in
                                       get_Dataset('./mydata2/' + everdata + '.csv')]
@@ -84,31 +76,23 @@ if __name__ == '__main__':
         logging = SimpleLogger(log_file)  # log to file
         logging('dataset: %s, Min: %.2f, Max: %.3f, ' % (everdata,Min, Max))
         for low in np.arange(Min, Max, step):
-            #paras.low = low
-            #log_file = os.path.join(paras.save_dir, ' %.2f-%.2f-log.txt' % (paras.low, paras.high))
-
             device = torch.device('cuda:0') if torch.cuda.is_available() else torch.device('cpu')
-            model = torch.load(os.path.join(paras.save_dir, 'best_dev_model_260.pt'),
+            model = torch.load(os.path.join(paras.save_dir, paras.model),
                                map_location=device)  # load模型
-            model.dfa_odes_forward.transforms = defaultdict(list)
-            model.dfa_odes_forward.add_transform(1, 2, [[0, 'geq', paras.high]])
-            model.dfa_odes_forward.add_transform(4, 1, [[0, 'leq',low]])
+            model.aj_odes_forward.transforms = defaultdict(list)
+            model.aj_odes_forward.add_transform(1, 2, [[0, 'geq', paras.high]])
+            model.aj_odes_forward.add_transform(4, 1, [[0, 'leq',low]])
             Ytest_pred, test_state_pred = model.encoding_plus_predict(  # 模型预测
                 Xtest_tn, dttest_tn, Ytest_tn[:, :paras.bptt], stest_tn[:, :paras.bptt], paras.bptt, None)
-            test_dfa_state_pred_array = model.select_dfa_states(
+            test_aj_state_pred_array = model.select_aj_states(
                 test_state_pred[0]).int().detach().cpu().numpy()  # 把状态也拿出来
 
-            # visualize_prediction(
-            #     Ytest[paras.bptt:] * Y_std + Y_mean, t2np(Ytest_pred) * Y_std + Y_mean, test_dfa_state_pred_array,
-            #     Xtest[paras.bptt:, 0] * X_std[0] + X_mean[0],
-            #     save_dir,
-            #     seg_length=2000, dir_name='vis-%.1f' % (low))  # 模型自己预测的
-            visualize_prediction_power2(  # 可视化画图专用
-                Ytest[paras.bptt:] * Y_std + Y_mean, t2np(Ytest_pred) * Y_std + Y_mean, test_dfa_state_pred_array,
+            visualize_prediction_power(  # 可视化画图专用
+                Ytest[paras.bptt:] * Y_std + Y_mean, t2np(Ytest_pred) * Y_std + Y_mean, test_aj_state_pred_array,
                 Xtest[paras.bptt:, 0] * X_std[0] + X_mean[0],low
                 ,save_dir,
                 seg_length=1000, dir_name='vis-%.1f' % (low))
-            # 制冷功率的积分
+
             predicted_power = (t2np(Ytest_pred) * Y_std + Y_mean)[..., -1].reshape(-1)  # 算power
             predicted_power[predicted_power < 0] = 0
             sum_power = (
@@ -118,27 +102,37 @@ if __name__ == '__main__':
             logging('Low: %.2f,  Predicted Power: %.3f' % (low, float(sum_power)))
             sum_powers.append(sum_power)
 
-            #制冷量的积分
+            #cop
             pcooling_power = (t2np(Ytest_pred) * Y_std + Y_mean)[..., 1].reshape(-1)
             pcooling_power[pcooling_power <0 ] = 0
             sum_pcooling_power =  (
                 pcooling_power[:7200] *
                     dttest_tn[:, paras.bptt:paras.bptt+7200].reshape(-1).detach().cpu().numpy()/(3.6*100000)
             ).sum()
-
             logging('Low: %.2f, sum_pcooling_powerr: %.3f' % (low, float(sum_pcooling_power)))
-            sum_pcooling_powers.append(sum_pcooling_power)
+            cop = round((sum_pcooling_power/sum_power), 2) #百分比
+            logging('Low: %.2f, cop: %.3f' % (low, float(cop)))
+            cops.append(cop)
 
+            #pue
+            pserver = (Xtest*X_std+X_mean)[...,0].reshape(-1)
+            pserver_power = (pserver[paras.bptt:paras.bptt+7200] *
+                    dttest_tn[:, paras.bptt:paras.bptt+7200].reshape(-1).detach().cpu().numpy()/(3.6*100000)
+            ).sum()
+            pue = round((1+(sum_power/pserver_power)), 2) #百分比
+            logging('Low: %.2f, pue: %.3f' % (low, float(pue)))
+            pues.append(pue)
 
         min_sum_power = min(sum_powers)
         ratio_power_decline = ((sum_powers[0]-min_sum_power)/sum_powers[0])*100
         logging_all('%s ratio_power_decline: %.2f' % (everdata,ratio_power_decline))
-
+        cops_all.append(cops)
+        pue_all.append(pues)
         sum_powers_all.append(sum_powers)
 
 
     plt.title('all' + " - " + 'Power')
-    plt.figure(figsize=(9, 5))
+    plt.figure(figsize=(8, 5))
     color = ['blue', 'red', 'green', 'purple']
     line = ['-', '--', ':']
     for i, sum_power in enumerate(sum_powers_all):
@@ -147,15 +141,53 @@ if __name__ == '__main__':
         min_idx = sum_power.index(min(sum_power))
         plt.plot(Min + (min_idx * step), sum_power[min_idx], marker='x', color=color[i], markersize='20')
         plt.legend(fontsize=18)
-    plt.text(14.3, 7, '    Optimal\nlower boundary', fontsize=16, color='black')
-    plt.arrow(15, 6.9, -0.9, -2.5, shape='full', head_width=0.1, head_length=0.2, length_includes_head=True)
-    plt.arrow(15, 6.9, 0, -1.2, shape='full', head_width=0.1, head_length=0.2, length_includes_head=True)
-    plt.arrow(15, 6.9, 0.39, -0.52, shape='full', head_width=0.1, head_length=0.2, length_includes_head=True)
+    plt.text(13.98, 4.35, '    Optimal\nlower threshold', fontsize=16, color='black')
+    plt.arrow(15.75,4.4,-1.1, -0.55,shape='full',head_width=0.1,head_length=0.2,length_includes_head=True,ec ='black')
+    plt.arrow(15.75, 4.4, -0.28, 0.8, shape='full', head_width=0.1, head_length=0.2, length_includes_head=True, ec='black')
+    plt.arrow(15.75,4.4,0.26, 1.3, shape='full',head_width=0.1,head_length=0.2,length_includes_head=True,ec ='black')
+
     plt.xticks(fontsize=19)
     plt.yticks(fontsize=19)
-    plt.xlabel('$T_{low}(℃)$', fontsize=20)
+    plt.xlabel('$Ti_{\min}(℃)$', fontsize=20)
     plt.ylabel('Energy consumption(kwh)', fontsize=20)
     plt.tight_layout()
-    plt.savefig(os.path.join(save_dir_img, '%.1f-%.1f-%.1f.png' % (Min, Max, step)))
-    plt.savefig(os.path.join(save_dir_img, '%.1f-%.1f-%.1f.eps' % (Min, Max, step)), format="eps", dpi=600)
+
+    plt.savefig(os.path.join(save_dir_img, 'power%.1f-%.1f-%.1f.png' % (Min, Max, step)))
     plt.close()
+
+
+    # cop
+    plt.figure(figsize=(8, 5))
+    color = ['blue', 'red', 'green', 'purple']
+    line = ['-', '--', ':']
+    for i, cops in enumerate(cops_all):
+        # plt.title('Compare the power consumption at different lower temperature limits', fontsize=20)
+        plt.plot(np.arange(Min, Max, step), cops, label=paras.datasets2[i], linestyle=line[i], color=color[i])
+        #plt.legend(fontsize=18)
+        plt.legend(fontsize=18)
+    plt.xticks(fontsize=19)
+    plt.yticks(fontsize=19)
+    plt.xlabel('$Ti_{\min}(℃)$', fontsize=20)
+    plt.ylabel('COP', fontsize=20)
+    plt.tight_layout()
+    plt.savefig(os.path.join(save_dir_img, 'cop%.1f-%.1f-%.1f.png' % (Min, Max, step)))
+    plt.close()
+
+    # pue
+    plt.figure(figsize=(8, 5))
+    color = ['blue', 'red', 'green', 'purple']
+    line = ['-', '--', ':']
+    for i, pues in enumerate(pue_all):
+        # plt.title('Compare the power consumption at different lower temperature limits', fontsize=20)
+        plt.plot(np.arange(Min, Max, step), pues, label=paras.datasets2[i], linestyle=line[i], color=color[i])
+        min_idx = pues.index(min(pues))
+        plt.plot(Min + (min_idx * step), pues[min_idx], marker='x', color=color[i], markersize='20')
+        plt.legend(fontsize=18)
+    plt.xticks(fontsize=19)
+    plt.yticks(fontsize=19)
+    plt.xlabel('$Ti_{\min}(℃)$', fontsize=20)
+    plt.ylabel('PUE', fontsize=20)
+    plt.tight_layout()
+    plt.savefig(os.path.join(save_dir_img, 'pue%.1f-%.1f-%.1f.png' % (Min, Max, step)))
+    plt.close()
+
