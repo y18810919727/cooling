@@ -11,4 +11,4 @@ cd scripts
 ```
 
 ###  figure of results
-https://github.com/y18810919727/cooling/blob/master/results/result.png
+https://raw.githubusercontent.com/y18810919727/cooling/master/results/result.png
