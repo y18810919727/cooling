@@ -12,7 +12,7 @@ by chunking into bbtt-long segments.
 """
 
 class EpochTrainer(object):
-    def __init__(self, model, optimizer, epochs, X, Y, states, dt, batch_size=1, gpu=False, bptt=50,scheme=None,all_sqe_nums=False,
+    def __init__(self, model, optimizer, epochs, X, Y, states, dt, batch_size=1, gpu=False, bptt=50,all_sqe_nums=False,
                  save_dir='./', short_encoding=False, logging=None, debug=False,mymodel=None):
 
         tr = TimeRecorder()
@@ -24,7 +24,6 @@ class EpochTrainer(object):
         self.gpu = gpu
         self.Xtrain, self.Ytrain = None, None
         self.all_sqe_nums = all_sqe_nums
-        self.scheme = scheme
         self.bptt = bptt  # for now: constant segment length, hence constant train indices
         self.w = min(bptt, X.shape[0]//2)
         self.class_criterion = torch.nn.CrossEntropyLoss()
@@ -123,13 +122,12 @@ class EpochTrainer(object):
             dt = self.dttrain[iter_inds_next, :, :]  # (batch, bptt, 1)
             Y_target = self.Ytrain[iter_inds_next, :, :]
             s = self.states_train[iter_inds_next]
-            scheme = self.scheme
             # training
 
             self.model.train()
             self.model.zero_grad()
 
-            pre_outputs, pre_states = self.model.forward_posterior(pre_X,torch.cat([pre_X, pre_Y_target], dim=-1),aj_states=pre_s, dt=pre_dt, scheme=scheme)
+            pre_outputs, pre_states = self.model.forward_posterior(pre_X,torch.cat([pre_X, pre_Y_target], dim=-1),aj_states=pre_s, dt=pre_dt)
             state0 = pre_states[:, -1]
 
             with tr('forward'):

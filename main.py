@@ -30,12 +30,12 @@ parser.add_argument("--scheme", type=str, default='euler', choices=RKchoices, he
 # training
 parser.add_argument("--batch_size", type=int, default=4000, help="batch size")
 parser.add_argument("--visualization_len", type=int, default=2000, help="The length of visualization.")
-parser.add_argument("--epochs", type=int, default=40, help="Number of epochs")
+parser.add_argument("--epochs", type=int, default=200, help="Number of epochs")
 parser.add_argument("--lr", type=float, default=0.005, help="learning rate")
 parser.add_argument("--bptt", type=int, default=800, help="bptt")
 parser.add_argument("--l2", type=float, default=0., help="L2 regularization")
 parser.add_argument("--save", type=str, default='results', help="experiment logging folder")
-parser.add_argument("--eval_epochs", type=int, default=10, help="validation every so many epochs")
+parser.add_argument("--eval_epochs", type=int, default=5, help="validation every so many epochs")
 parser.add_argument("--seed", type=int, default=None, help="random seed")
 parser.add_argument("--powertime", type=int, default=1800, help="powertime")
 
@@ -49,7 +49,7 @@ parser.add_argument("--debug", action="store_true", help="debug mode, for accele
 
 #files = ['P-1.7k.csv','P-3.8K.csv','P-4.2k.csv','P-6.3k.csv']
 parser.add_argument("--datasets_folder", type=str, default='./data')
-parser.add_argument("--datasets", type=list, default=['P-1.7k','P-3.8k','P-4.2k','P-6.3k'], help="datasets")
+parser.add_argument("--datasets", type=list, default=['P-1.7k','P-3.8k','P-6.3k'], help="datasets")
 parser.add_argument("--mymodel", type=str, default='merge', choices=['merge', 'rnn', 'one'])
 paras = parser.parse_args()
 hard_reset = paras.reset
@@ -78,8 +78,6 @@ logging('Args: {}'.format(paras))
 
 
 
-beijing = timezone(timedelta(hours=8))
-time_beijing = datetime.utcnow().astimezone(beijing)
 
 
 """
@@ -182,7 +180,8 @@ model = AJ_MIMO(aj_setting['ode_nums'], 1, k_in, k_out, paras.k_h, y_mean=Y_mean
                  ode_2order=aj_setting['ode_2order'],
                  transformations=aj_setting['transformations'],
                  state_transformation_predictor=aj_setting['predictors'], cell_type=paras.mymodel,
-                 Ly_share=aj_setting['Ly_share'])
+                 Ly_share=aj_setting['Ly_share'],
+                scheme=paras.scheme)
 
 model.apply(init_weights)
 
@@ -206,14 +205,14 @@ optimizer = torch.optim.Adam(model.parameters(), lr=paras.lr, weight_decay=paras
 
 
 trainer = EpochTrainer(model, optimizer, paras.epochs, Xtrain, Ytrain, strain, dttrain,
-                       batch_size=paras.batch_size, gpu=GPU, bptt=paras.bptt,scheme=paras.scheme,all_sqe_nums=all_sqe_nums, save_dir=paras.save,
+                       batch_size=paras.batch_size, gpu=GPU, bptt=paras.bptt,all_sqe_nums=all_sqe_nums, save_dir=paras.save,
                        logging=logging, debug=paras.debug,mymodel = paras.mymodel)  #dttrain ignored for all but 'variable' methods
 t00 = time()
 best_dev_error = 1.e5
 best_dev_epoch = 1
 error_test = -1
 
-max_epochs_no_decrease = 50  # If error in dev does not decrease in long time, the training will be paused early.
+max_epochs_no_decrease = 30  # If error in dev does not decrease in long time, the training will be paused early.
 
 
 try:  # catch error and redirect to logger

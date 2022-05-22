@@ -10,7 +10,7 @@ from aj_ode.odes_stationary import AJ_ODENets
 class AJ_MIMO(nn.Module):
 
     def __init__(self, ode_nums, layers, k_in, k_out, k_h, y_mean, y_std, odes_para,
-                 ode_2order=False, transformations=None, state_transformation_predictor=None, Ly_share=False,
+                 ode_2order=False, transformations=None, state_transformation_predictor=None, Ly_share=False,scheme=None,
                  dropout=0., cell_type='merge'):
         # potential kwargs: meandt, train_scheme, eval_scheme
 
@@ -27,11 +27,11 @@ class AJ_MIMO(nn.Module):
                                                   odes_para=odes_para, ode_2order=ode_2order,
                                                   state_transformation_predictor=state_transformation_predictor,
                                                   transformations_rules=transformations, cell_type=cell_type,
-                                                  Ly_share=Ly_share)
+                                                  Ly_share=Ly_share,scheme=scheme)
         self.aj_odes_posterior = AJ_ODENets(ode_nums, layers, k_in, k_out, k_h, y_mean, y_std,
                                                    odes_para=odes_para, ode_2order=ode_2order,
                                                     cell_type=cell_type,
-                                                    Ly_share=Ly_share)
+                                                    Ly_share=Ly_share,scheme=scheme)
     def states_classification(self, states, inputs,t):
         reshape = False
         bs, l = None, None
@@ -56,14 +56,14 @@ class AJ_MIMO(nn.Module):
 
         return new_s, new_s_prob, extra_info
 
-    def forward_posterior(self, in_x ,inputs, state0=None, aj_states=None, dt=None, scheme=None,**kwargs):
+    def forward_posterior(self, in_x ,inputs, state0=None, aj_states=None, dt=None,**kwargs):
         return self.model_call(
-            self.aj_odes_posterior, self.expand_input_out,in_x, inputs, state0=state0, aj_states=aj_states, dt=dt,scheme=scheme, **kwargs
+            self.aj_odes_posterior, self.expand_input_out,in_x, inputs, state0=state0, aj_states=aj_states, dt=dt, **kwargs
         )
 
-    def forward_prediction(self,inputs, state0=None, aj_states=None, dt=None,scheme=None, **kwargs):
+    def forward_prediction(self,inputs, state0=None, aj_states=None, dt=None, **kwargs):
         return self.model_call(
-            self.aj_odes_forward, self.expand_input,inputs,inputs, state0=state0, aj_states=aj_states, dt=dt,scheme=scheme, **kwargs
+            self.aj_odes_forward, self.expand_input,inputs,inputs, state0=state0, aj_states=aj_states, dt=dt, **kwargs
         )
     """
     modelcall,给定初始状态，将输入扔进去，更新状态，预测
@@ -94,7 +94,7 @@ class AJ_MIMO(nn.Module):
             dt_i = dt[:, i, :]
             in_x_i = in_x[:, i, :]
             aj_state_i = aj_states[:, i, :] if aj_states is not None else None
-            output, state = model(state, x0, dt=dt_i, new_s=aj_state_i,x_in=in_x_i,scheme=scheme)
+            output, state = model(state, x0, dt=dt_i, new_s=aj_state_i,x_in=in_x_i)
             outputs.append(output)
             states.append(state)
 

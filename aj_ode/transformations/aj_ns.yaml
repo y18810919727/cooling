@@ -6,6 +6,7 @@ transformations:   #规则转移
     to: 2
     rules:
       - [0 , geq , 20]
+  - from: 4
     to: 1
     rules:
     - [0 ,leq, 12]

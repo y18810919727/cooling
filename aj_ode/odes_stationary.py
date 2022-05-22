@@ -8,7 +8,7 @@ from collections import defaultdict
 
 class AJ_ODENets(nn.Module):
     def __init__(self, ode_nums, layers, k_in, k_out, k_h, y_mean, y_std, odes_para, ode_2order, state_transformation_predictor=None,
-                 transformations_rules=None, cell_type='cde', linear_decoder=False, Ly_share=False):
+                 transformations_rules=None, cell_type='cde', linear_decoder=False, Ly_share=False,scheme=None):
         super().__init__()
         self.k_in = k_in
         self.k_out = k_out
@@ -33,7 +33,7 @@ class AJ_ODENets(nn.Module):
             Ly = self.make_decoder(k_h , k_out) if Ly_share else None
             self.odes = nn.ModuleList([ODECellClass(
                 k_in, k_out, k_h,self.k_expand_in,self.k_t, layers, Ly=(Ly if Ly_share else self.make_decoder(k_h, k_out)),
-                ode_2order=ode_2order, name=para['name'], y_type=para['y_type'], cell=para['cell']
+                scheme=scheme,ode_2order=ode_2order, name=para['name'], y_type=para['y_type'], cell=para['cell']
             ) for para in odes_para])
 
             self.transforms = defaultdict(list)
@@ -51,7 +51,7 @@ class AJ_ODENets(nn.Module):
         elif cell_type == 'rnn':
             Ly = self.make_decoder_not_t(k_h, k_out) if Ly_share else None
             self.odes = nn.ModuleList([ODECellClass(
-                k_in, k_out, k_h,self.k_expand_in,self.k_t, layers, Ly=(Ly if Ly_share else self.make_decoder(k_h, k_out)),
+                k_in, k_out, k_h,self.k_expand_in,self.k_t, layers, Ly=(Ly if Ly_share else self.make_decoder(k_h, k_out)),scheme=scheme,
                 ode_2order=ode_2order, name=para['name'], y_type=para['y_type'], cell=para['cell']
             ) for para in odes_para])
 
@@ -70,7 +70,7 @@ class AJ_ODENets(nn.Module):
         elif cell_type == 'one':
             Ly = self.make_decoder_not_t(k_h, k_out) if Ly_share else None
             self.odes = nn.ModuleList([ODECellClass(
-                k_in, k_out, k_h,self.k_expand_in,self.k_t, layers, Ly=(Ly if Ly_share else self.make_decoder(k_h, k_out)),
+                k_in, k_out, k_h,self.k_expand_in,self.k_t, layers, Ly=(Ly if Ly_share else self.make_decoder(k_h, k_out)),scheme=scheme,
                 ode_2order=ode_2order, name=para['name'], y_type=para['y_type'], cell=para['cell']
             ) for para in odes_para])
 
@@ -201,7 +201,7 @@ class AJ_ODENets(nn.Module):
     def select_aj_states(states):
         return states[:, -1:]
 
-    def combinational_ode(self, s, ht, xt, dt,scheme):
+    def combinational_ode(self, s, ht, xt, dt):
         nht = torch.zeros_like(ht)
         for i in range(self.ode_nums):
             indices = (s.squeeze(dim=-1) == i)
@@ -209,15 +209,15 @@ class AJ_ODENets(nn.Module):
                 nht[indices] = self.odes[i](ht[indices], xt[indices], dt[indices])
         return nht
 
-    def Rnn_ode(self, s, ht, xt,dt,s_cum_t,scheme):
+    def Rnn_ode(self, s, ht, xt,dt,s_cum_t):
         nht = torch.zeros_like(ht)
         for i in range(self.ode_nums):
             indices = (s.squeeze(dim=-1) == i)
             if torch.any(indices):
-                nht[indices] = self.odes[i](ht[indices], xt[indices], dt[indices],s_cum_t[indices],scheme)
+                nht[indices] = self.odes[i](ht[indices], xt[indices], dt[indices],s_cum_t[indices])
         return nht
 
-    def One_ode(self, s, ht, xt, dt,scheme):
+    def One_ode(self, s, ht, xt, dt):
         nht = torch.zeros_like(ht)
         for i in range(self.ode_nums):
             indices = (s.squeeze(dim=-1) == i)
@@ -226,7 +226,7 @@ class AJ_ODENets(nn.Module):
         return nht
 
 
-    def forward(self, state, xt, dt,new_s=None,x_in=None,scheme=None):
+    def forward(self, state, xt, dt,new_s=None,x_in=None):
         """
 
         :param state: The concatenation of ht, cum_t, cur_s : (bs, k_h + 2)
@@ -245,11 +245,11 @@ class AJ_ODENets(nn.Module):
         xt_t = torch.cat([s_cum_t,xt], dim=-1)
 
         if self.cell_type == 'merge':
-            new_ht = self.combinational_ode(s, ht, xt_t ,dt,scheme)
+            new_ht = self.combinational_ode(s, ht, xt_t ,dt)
         elif self.cell_type == 'rnn':
-            new_ht = self.Rnn_ode(s, ht, xt ,dt,s_cum_t,scheme)
+            new_ht = self.Rnn_ode(s, ht, xt ,dt,s_cum_t)
         elif self.cell_type == 'one':
-            new_ht = self.One_ode(s, ht, xt , dt,scheme)
+            new_ht = self.One_ode(s, ht, xt , dt)
 
         new_cum_t = cum_t + dt
 

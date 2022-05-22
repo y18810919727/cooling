@@ -6,11 +6,11 @@ from torch import nn
 
 
 
-def my_odeint(x, h0, cell, t, adjoint=None, **kwargs):
+def my_odeint(x, h0, cell, t,scheme=None,adjoint=None, **kwargs):
     odeint = torchdiffeq.odeint_adjoint if adjoint else torchdiffeq.odeint
     my_Func = ODE_Func(x=x, cell=cell)
     ht = odeint(my_Func,h0,t,rtol=0.001,
-                   atol=0.001,method='euler')
+                   atol=0.001,method=scheme)
     return ht[1]
 
 class ODE_Func(nn.Module):
@@ -37,7 +37,7 @@ class ODE_Rnn_Func(nn.Module):
         return self.func(h)
 
 class ODE_RNN(nn.Module):
-    def __init__(self, k_in, k_out, k_h, k_expand_in,k_t,num_layers, Ly, hidden_size=32, ode_2order=False,
+    def __init__(self, k_in, k_out, k_h, k_expand_in,k_t,num_layers, Ly,scheme, hidden_size=32, ode_2order=False,
                  name='default', y_type=None, cell='gru'):
         super().__init__()
         self.k_in = k_in
@@ -52,15 +52,16 @@ class ODE_RNN(nn.Module):
         y_type = [0 if x == 'n' else x for x in y_type]
         self.y_type = y_type
         self.Ly = Ly
+        self.scheme = scheme
         self.func = ODE_Rnn_Func(k_h)
 
 
-    def forward(self, state, xt,dt,ti,scheme):
+    def forward(self, state, xt,dt,ti):
 
         yt, ht = state[..., :self.k_out], state[..., self.k_out:]
         t = torch.tensor([0.0, 0.1]).cuda()
         ht_ = torchdiffeq.odeint_adjoint(self.func, ht, t, rtol=0.001,
-                                        atol=0.001, method=scheme)[1]
+                                        atol=0.001, method=self.scheme)[1]
         ht = self.cell(xt,ht_)
         yt = self.update_y(yt, ht)
         return torch.cat([yt, ht], dim=-1)
@@ -74,7 +75,7 @@ class ODE_RNN(nn.Module):
 
 
 class ODEOneCell(nn.Module):
-    def __init__(self, k_in, k_out, k_h, k_expand_in, k_t, num_layers, Ly, hidden_size=32, ode_2order=False,
+    def __init__(self, k_in, k_out, k_h, k_expand_in, k_t, num_layers, Ly,scheme,hidden_size=32, ode_2order=False,
                  name='default', y_type=None, cell='gru'):
         super().__init__()
         self.k_in = k_in
@@ -87,14 +88,12 @@ class ODEOneCell(nn.Module):
         y_type = [2 if x == 'n' else x for x in y_type]
         self.y_type = y_type
         self.Ly = Ly
-        if self.ode_2order:
-            assert k_h % 2 == 0, 'ode_2order=True mode requires the k_h is even.'
-        if cell == 'gru':
-            self.cell = nn.GRUCell(k_expand_in+k_in, k_h)
+        self.scheme = scheme
+        self.cell = nn.GRUCell(k_expand_in+k_in, k_h)
     def forward(self, state, xt, dt):
         yt, ht = state[..., :self.k_out], state[..., self.k_out:]
         t = torch.tensor([0.0, 0.1]).cuda()
-        ht = my_odeint(xt, ht, self.cell, t, adjoint=True)
+        ht = my_odeint(xt, ht, self.cell, t,scheme=self.scheme,adjoint=True)
         yt = self.update_y(yt, ht, dt)
         return torch.cat([yt, ht], dim=-1)
     def update_y(self, yt, ht, dt):
@@ -112,7 +111,7 @@ class ODEOneCell(nn.Module):
 
 
 class ODEMergeCell(nn.Module):
-    def __init__(self, k_in, k_out, k_h, k_expand_in,k_t,num_layers, Ly, hidden_size=32, ode_2order=False,
+    def __init__(self, k_in, k_out, k_h, k_expand_in,k_t,num_layers, Ly,scheme, hidden_size=32, ode_2order=False,
                  name='default', y_type=None, cell='gru'):
         super().__init__()
         self.k_in = k_in
@@ -125,12 +124,13 @@ class ODEMergeCell(nn.Module):
         y_type = [2 if x == 'n' else x for x in y_type]
         self.y_type = y_type
         self.Ly = Ly
+        self.scheme=scheme
         self.cell = nn.GRUCell(k_expand_in+k_in+k_t, k_h)
     def forward(self, state, xt, dt):
         yt, ht = state[..., :self.k_out], state[..., self.k_out:]
 
         t = torch.tensor([0.0,0.1]).cuda()
-        ht=my_odeint(xt, ht, self.cell, t, adjoint=False)
+        ht=my_odeint(xt, ht, self.cell, t,scheme=self.scheme, adjoint=False)
         yt = self.update_y(yt, ht, dt)
         return torch.cat([yt, ht], dim=-1)
 
@@ -142,7 +142,6 @@ class ODEMergeCell(nn.Module):
         nyt[..., y_type == 1] += (Ly_out[..., y_type == 1] - yt[..., y_type == 1]) * dt
         nyt[..., y_type == 2] += Ly_out[..., y_type == 2] * dt
         return nyt
-
 
 class Predictor(nn.Module):
     def __init__(self, input_size, hidden):
