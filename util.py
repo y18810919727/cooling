@@ -191,8 +191,8 @@ def add_state_label(df):
             elif cooling == 23300:
                 cur_state = 4
         elif cur_state == 1:
-            #if ti >= 20:
-            if np - power > 200 and ti >= 20:
+            if ti >= 20:
+            #if np - power > 200 and ti >= 20:
                 cur_state = 2
         elif cur_state == 2:
             if power > np and power > 5000:

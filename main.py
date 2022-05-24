@@ -35,7 +35,7 @@ parser.add_argument("--lr", type=float, default=0.005, help="learning rate")
 parser.add_argument("--bptt", type=int, default=800, help="bptt")
 parser.add_argument("--l2", type=float, default=0., help="L2 regularization")
 parser.add_argument("--save", type=str, default='results', help="experiment logging folder")
-parser.add_argument("--eval_epochs", type=int, default=5, help="validation every so many epochs")
+parser.add_argument("--eval_epochs", type=int, default=10, help="validation every so many epochs")
 parser.add_argument("--seed", type=int, default=None, help="random seed")
 parser.add_argument("--powertime", type=int, default=1800, help="powertime")
 

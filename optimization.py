@@ -32,7 +32,7 @@ if __name__ == '__main__':
         os.mkdir(save_dir_img)
     log_file_all = os.path.join(save_dir_img, 'all.txt' )
     logging_all = SimpleLogger(log_file_all)  # log to file
-    filename = "./result/optimization_test/data.pkl"
+    filename = "./results/optimization_test/data.pkl"
     file = open(filename, "rb")
     data = pickle.load(file)
     X_mean = data['X_mean']
@@ -51,7 +51,7 @@ if __name__ == '__main__':
         Max = 18.5
         step = 0.5
         Xtest, Ytest, ttest, stest = [df.to_numpy(dtype=np.float32) for df in
-                                      get_Dataset('./mydata2/' + everdata + '.csv')]
+                                      get_Dataset('./data/' + everdata + '.csv')]
         dttest = np.append(ttest[1:] - ttest[:-1], ttest[1] - ttest[0]).reshape(-1, 1)
         # Y_mean, Y_std = array_operate_with_nan(Ytest, np.mean), array_operate_with_nan(Ytest, np.std)  # 归一化
         # X_mean, X_std = array_operate_with_nan(Xtest, np.mean), array_operate_with_nan(Xtest, np.std)
