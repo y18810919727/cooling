@@ -6,6 +6,7 @@ import torch
 from common.modules import MSELoss_nan
 from torch import nn
 from aj_ode.odes_stationary import AJ_ODENets
+from  aj_ode.interpolate import natural_cubic_spline_coeffs,NaturalCubicSpline
 
 class AJ_MIMO(nn.Module):
 
@@ -85,7 +86,10 @@ class AJ_MIMO(nn.Module):
         states = []
         inputs = expand_cell(inputs)
         inputs = torch.cat([in_x, inputs], dim=-1)
-
+        t = torch.arange(start=0, end=inputs.shape[1]/10, step=0.1).cuda()
+        if self.cell_type == 'cde':
+            train_coeffs = natural_cubic_spline_coeffs(t, in_x)
+            spline = NaturalCubicSpline(t, train_coeffs)
         if dt is None:
             dt = torch.ones(*inputs.size()[:2], device=inputs.device).unsqueeze(dim=-1) / 10
 
@@ -93,8 +97,12 @@ class AJ_MIMO(nn.Module):
             x0 = inputs[:, i, :]
             dt_i = dt[:, i, :]
             in_x_i = in_x[:, i, :]
+            t_i = t[i]
             aj_state_i = aj_states[:, i, :] if aj_states is not None else None
-            output, state = model(state, x0, dt=dt_i, new_s=aj_state_i,x_in=in_x_i)
+            if self.cell_type == 'cde':
+                output, state = model(state, x0, dt=dt_i, new_s=aj_state_i,x_in=in_x_i,t=t_i,dx_dt=spline.derivative)
+            else:
+                output, state = model(state, x0, dt=dt_i, new_s=aj_state_i, x_in=in_x_i, t=t_i)
             outputs.append(output)
             states.append(state)
 

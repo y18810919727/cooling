@@ -1,7 +1,7 @@
 #!/usr/bin/python
 # -*- coding:utf8 -*-
 import torch
-from aj_ode.modules import Predictor, ODEMergeCell,ODE_RNN,ODEOneCell
+from aj_ode.modules import Predictor, ODEMergeCell,ODE_RNN,ODEOneCell,CDE
 from torch import nn
 from collections import defaultdict
 
@@ -27,6 +27,8 @@ class AJ_ODENets(nn.Module):
             ODECellClass = ODE_RNN
         elif cell_type == 'one':
             ODECellClass = ODEOneCell
+        elif cell_type == 'cde':
+            ODECellClass = CDE
         else:
             raise NotImplementedError('Cell %s is not implemented' % cell_type)
         if cell_type == 'merge':
@@ -49,6 +51,25 @@ class AJ_ODENets(nn.Module):
                         raise NotImplementedError
 
         elif cell_type == 'rnn':
+            Ly = self.make_decoder_not_t(k_h, k_out) if Ly_share else None
+            self.odes = nn.ModuleList([ODECellClass(
+                k_in, k_out, k_h,self.k_expand_in,self.k_t, layers, Ly=(Ly if Ly_share else self.make_decoder(k_h, k_out)),scheme=scheme,
+                ode_2order=ode_2order, name=para['name'], y_type=para['y_type'], cell=para['cell']
+            ) for para in odes_para])
+
+            self.transforms = defaultdict(list)
+            self.state_transformation_predictor = nn.ModuleDict()
+            if state_transformation_predictor is not None:
+                for kind, state in state_transformation_predictor:
+                    if kind == 'predict':
+                        self.state_transformation_predictor[str(state)] = Predictor(
+                            self.k_expand_in + self.k_in + self.k_h + self.k_t + self.k_s,
+                            self.k_in + self.k_h
+                        )
+                    else:
+                        raise NotImplementedError
+
+        elif cell_type == 'cde':
             Ly = self.make_decoder_not_t(k_h, k_out) if Ly_share else None
             self.odes = nn.ModuleList([ODECellClass(
                 k_in, k_out, k_h,self.k_expand_in,self.k_t, layers, Ly=(Ly if Ly_share else self.make_decoder(k_h, k_out)),scheme=scheme,
@@ -201,12 +222,12 @@ class AJ_ODENets(nn.Module):
     def select_aj_states(states):
         return states[:, -1:]
 
-    def combinational_ode(self, s, ht, xt, dt):
+    def combinational_ode(self, s, ht, xt, dt,t):
         nht = torch.zeros_like(ht)
         for i in range(self.ode_nums):
             indices = (s.squeeze(dim=-1) == i)
             if torch.any(indices):
-                nht[indices] = self.odes[i](ht[indices], xt[indices], dt[indices])
+                nht[indices] = self.odes[i](ht[indices], xt[indices], dt[indices],t)
         return nht
 
     def Rnn_ode(self, s, ht, xt,dt,s_cum_t):
@@ -225,8 +246,16 @@ class AJ_ODENets(nn.Module):
                 nht[indices] = self.odes[i](ht[indices], xt[indices], dt[indices])
         return nht
 
+    def Cde_ode(self, s, ht, xt, dt,t,dx_dt):
+        nht = torch.zeros_like(ht)
+        for i in range(self.ode_nums):
+            indices = (s.squeeze(dim=-1) == i)
+            if torch.any(indices):
+                nht[indices] = self.odes[i](ht[indices], xt[indices], dt[indices],t,dx_dt,indices,i)
+        return nht
 
-    def forward(self, state, xt, dt,new_s=None,x_in=None):
+
+    def forward(self, state, xt, dt,new_s=None,x_in=None,t=None,dx_dt=None):
         """
 
         :param state: The concatenation of ht, cum_t, cur_s : (bs, k_h + 2)
@@ -245,11 +274,13 @@ class AJ_ODENets(nn.Module):
         xt_t = torch.cat([s_cum_t,xt], dim=-1)
 
         if self.cell_type == 'merge':
-            new_ht = self.combinational_ode(s, ht, xt_t ,dt)
+            new_ht = self.combinational_ode(s, ht, xt_t ,dt,t)
         elif self.cell_type == 'rnn':
             new_ht = self.Rnn_ode(s, ht, xt ,dt,s_cum_t)
         elif self.cell_type == 'one':
             new_ht = self.One_ode(s, ht, xt , dt)
+        elif self.cell_type == 'cde':
+            new_ht = self.Cde_ode(s, ht, xt, dt,t,dx_dt)
 
         new_cum_t = cum_t + dt
 
@@ -260,6 +291,11 @@ class AJ_ODENets(nn.Module):
             )
 
         if new_s is None and  self.cell_type == 'rnn':
+            new_s, new_s_prob, _ = self.state_transform(
+                torch.cat([new_ht, cum_t, s], dim=-1),
+                xt,x_in=x_in
+            )
+        if new_s is None and  self.cell_type == 'cde':
             new_s, new_s_prob, _ = self.state_transform(
                 torch.cat([new_ht, cum_t, s], dim=-1),
                 xt,x_in=x_in

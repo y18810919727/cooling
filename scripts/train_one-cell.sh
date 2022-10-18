@@ -2,4 +2,4 @@
 
 cd ..
 
-CUDA_VISIBLE_DEVICES=1 python main.py  --save one-cell  --aj_yaml one_model --mymodel one
+CUDA_VISIBLE_DEVICES=1 python main.py  --save one-cell-1  --aj_yaml one_model --mymodel one

@@ -49,8 +49,8 @@ parser.add_argument("--debug", action="store_true", help="debug mode, for accele
 
 #files = ['P-1.7k.csv','P-3.8K.csv','P-4.2k.csv','P-6.3k.csv']
 parser.add_argument("--datasets_folder", type=str, default='./data')
-parser.add_argument("--datasets", type=list, default=['P-1.7k','P-3.8k','P-6.3k'], help="datasets")
-parser.add_argument("--mymodel", type=str, default='merge', choices=['merge', 'rnn', 'one'])
+parser.add_argument("--datasets", type=list, default=['P-1.7k','P-3.8k','P-4.2k','P-6.3k'], help="datasets")
+parser.add_argument("--mymodel", type=str, default='merge', choices=['merge', 'rnn', 'one','cde'])
 paras = parser.parse_args()
 hard_reset = paras.reset
 

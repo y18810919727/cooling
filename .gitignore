@@ -104,7 +104,7 @@ venv.bak/
 
 # mypy
 .mypy_cache/
-/data/*.csv
+
 /ori_data/*.csv
 
 /jupyters/*
